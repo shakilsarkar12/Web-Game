@@ -7,8 +7,8 @@ export class Player {
     this.scene = scene;
     this.world = world;
 
-    // Position & Physics
-    this.position = new THREE.Vector3(0, 1.7, 0);
+    // Position & Physics - Spawn on open street
+    this.position = new THREE.Vector3(0, 1.7, 12);
     this.velocity = new THREE.Vector3();
     this.rotation = new THREE.Euler(0, 0, 0, 'YXZ');
     this.isGrounded = true;
@@ -66,23 +66,23 @@ export class Player {
 
     // Arms
     const armMat = new THREE.MeshStandardMaterial({ color: 0x276749 });
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), armMat);
-    armL.position.set(-0.45, 1.25, 0);
-    group.add(armL);
+    this.armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), armMat);
+    this.armL.position.set(-0.45, 1.25, 0);
+    group.add(this.armL);
 
-    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), armMat);
-    armR.position.set(0.45, 1.25, 0);
-    group.add(armR);
+    this.armR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), armMat);
+    this.armR.position.set(0.45, 1.25, 0);
+    group.add(this.armR);
 
     // Legs
     const legMat = new THREE.MeshStandardMaterial({ color: 0x2d3748 });
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), legMat);
-    legL.position.set(-0.2, 0.4, 0);
-    group.add(legL);
+    this.legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), legMat);
+    this.legL.position.set(-0.2, 0.4, 0);
+    group.add(this.legL);
 
-    const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), legMat);
-    legR.position.set(0.2, 0.4, 0);
-    group.add(legR);
+    this.legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), legMat);
+    this.legR.position.set(0.2, 0.4, 0);
+    group.add(this.legR);
 
     return group;
   }
@@ -209,8 +209,26 @@ export class Player {
       this.camera.lookAt(this.position.x, this.position.y, this.position.z);
     }
 
+    // 6. Limb Walking Animation for TPS / Top-Down View
+    const isMoving = moveVector.lengthSq() > 0;
+    if (this.characterMesh && this.characterMesh.visible) {
+      if (isMoving) {
+        this.walkAnimTime = (this.walkAnimTime || 0) + delta * (isSprinting ? 14 : 9);
+        const legSwing = Math.sin(this.walkAnimTime) * 0.65;
+        if (this.legL) this.legL.rotation.x = legSwing;
+        if (this.legR) this.legR.rotation.x = -legSwing;
+        if (this.armL) this.armL.rotation.x = -legSwing * 0.6;
+        if (this.armR) this.armR.rotation.x = legSwing * 0.6;
+      } else {
+        if (this.legL) this.legL.rotation.x = 0;
+        if (this.legR) this.legR.rotation.x = 0;
+        if (this.armL) this.armL.rotation.x = 0;
+        if (this.armR) this.armR.rotation.x = 0;
+      }
+    }
+
     return {
-      isMoving: moveVector.lengthSq() > 0,
+      isMoving,
       isSprinting
     };
   }

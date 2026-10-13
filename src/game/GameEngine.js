@@ -110,9 +110,17 @@ export class GameEngine {
     this.renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 
     // Pointer Lock
-    this.renderer.domElement.addEventListener('click', () => {
+    const requestLock = () => {
       if (this.isRunning && !this.isPaused && document.pointerLockElement !== this.renderer.domElement) {
         this.renderer.domElement.requestPointerLock();
+      }
+    };
+    this.renderer.domElement.addEventListener('click', requestLock);
+    if (this.container) this.container.addEventListener('click', requestLock);
+    window.addEventListener('click', (e) => {
+      // If clicking outside modals/buttons, lock pointer
+      if (this.isRunning && !this.isPaused && !e.target.closest('button, .modal, [role="dialog"]')) {
+        requestLock();
       }
     });
   }
@@ -120,70 +128,71 @@ export class GameEngine {
   handleKeyDown(e) {
     if (!this.isRunning) return;
 
-    switch (e.code) {
-      case 'KeyW': this.input.moveForward = true; break;
-      case 'KeyS': this.input.moveBackward = true; break;
-      case 'KeyA': this.input.moveLeft = true; break;
-      case 'KeyD': this.input.moveRight = true; break;
-      case 'Space': this.input.jump = true; break;
-      case 'ShiftLeft':
-      case 'ShiftRight': this.input.sprint = true; break;
+    const key = (e.key || '').toLowerCase();
 
-      // Weapon switching (1, 2, 3, 4)
-      case 'Digit1': this.weaponSystem.switchWeapon('RIFLE'); break;
-      case 'Digit2': this.weaponSystem.switchWeapon('SHOTGUN'); break;
-      case 'Digit3': this.weaponSystem.switchWeapon('SMG'); break;
-      case 'Digit4': this.weaponSystem.switchWeapon('SNIPER'); break;
+    // Movement: WASD or Arrow Keys
+    if (e.code === 'KeyW' || key === 'w' || e.code === 'ArrowUp') {
+      this.input.moveForward = true;
+    } else if (e.code === 'KeyS' || key === 's' || e.code === 'ArrowDown') {
+      this.input.moveBackward = true;
+    } else if (e.code === 'KeyA' || key === 'a' || e.code === 'ArrowLeft') {
+      this.input.moveLeft = true;
+    } else if (e.code === 'KeyD' || key === 'd' || e.code === 'ArrowRight') {
+      this.input.moveRight = true;
+    } else if (e.code === 'Space' || key === ' ') {
+      this.input.jump = true;
+    } else if (e.shiftKey || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+      this.input.sprint = true;
+    }
 
-      // Reload
-      case 'KeyR': this.weaponSystem.reload(); break;
+    // Weapon switching (1, 2, 3, 4)
+    if (e.code === 'Digit1' || key === '1') this.weaponSystem.switchWeapon('RIFLE');
+    if (e.code === 'Digit2' || key === '2') this.weaponSystem.switchWeapon('SHOTGUN');
+    if (e.code === 'Digit3' || key === '3') this.weaponSystem.switchWeapon('SMG');
+    if (e.code === 'Digit4' || key === '4') this.weaponSystem.switchWeapon('SNIPER');
 
-      // Grenade
-      case 'KeyG': {
-        const dir = new THREE.Vector3();
-        this.camera.getWorldDirection(dir);
-        this.weaponSystem.throwGrenade(this.player.position, dir, this.world);
-        break;
-      }
+    // Reload
+    if (e.code === 'KeyR' || key === 'r') this.weaponSystem.reload();
 
-      // Camera Perspective Switch
-      case 'KeyV': {
-        const newMode = this.player.togglePerspective();
-        this.uiCallbacks.showNotification(`Camera: ${newMode}`);
-        break;
-      }
+    // Grenade
+    if (e.code === 'KeyG' || key === 'g') {
+      const dir = new THREE.Vector3();
+      this.camera.getWorldDirection(dir);
+      this.weaponSystem.throwGrenade(this.player.position, dir, this.world);
+    }
 
-      // Rickshaw Horn / Bell for fun!
-      case 'KeyH': {
-        soundEngine.playRickshawBell();
-        this.uiCallbacks.showNotification('ঢাকাইয়া রিকশার ঘণ্টা! (Tring Tring)');
-        break;
-      }
+    // Camera Perspective Switch
+    if (e.code === 'KeyV' || key === 'v') {
+      const newMode = this.player.togglePerspective();
+      this.uiCallbacks.showNotification(`Camera: ${newMode}`);
+    }
 
-      // Open Supply Shop (B)
-      case 'KeyB': {
-        this.toggleShop();
-        break;
-      }
+    // Rickshaw Horn / Bell for fun!
+    if (e.code === 'KeyH' || key === 'h') {
+      soundEngine.playRickshawBell();
+      this.uiCallbacks.showNotification('ঢাকাইয়া রিকশার ঘণ্টা! (Tring Tring)');
+    }
 
-      // Pause Game (Escape / P)
-      case 'KeyP': {
-        this.togglePause();
-        break;
-      }
+    // Open Supply Shop (B)
+    if (e.code === 'KeyB' || key === 'b') {
+      this.toggleShop();
+    }
+
+    // Pause Game (Escape / P)
+    if (e.code === 'KeyP' || key === 'p' || e.code === 'Escape') {
+      this.togglePause();
     }
   }
 
   handleKeyUp(e) {
-    switch (e.code) {
-      case 'KeyW': this.input.moveForward = false; break;
-      case 'KeyS': this.input.moveBackward = false; break;
-      case 'KeyA': this.input.moveLeft = false; break;
-      case 'KeyD': this.input.moveRight = false; break;
-      case 'Space': this.input.jump = false; break;
-      case 'ShiftLeft':
-      case 'ShiftRight': this.input.sprint = false; break;
-    }
+    const key = (e.key || '').toLowerCase();
+
+    if (e.code === 'KeyW' || key === 'w' || e.code === 'ArrowUp') this.input.moveForward = false;
+    if (e.code === 'KeyS' || key === 's' || e.code === 'ArrowDown') this.input.moveBackward = false;
+    if (e.code === 'KeyA' || key === 'a' || e.code === 'ArrowLeft') this.input.moveLeft = false;
+    if (e.code === 'KeyD' || key === 'd' || e.code === 'ArrowRight') this.input.moveRight = false;
+    if (e.code === 'Space' || key === ' ') this.input.jump = false;
+    if (!e.shiftKey) this.input.sprint = false;
   }
 
   handleMouseDown(e) {

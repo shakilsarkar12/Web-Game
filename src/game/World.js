@@ -139,7 +139,7 @@ export class World {
     const roundabout = new THREE.Mesh(roundaboutGeo, roundaboutMat);
     roundabout.position.set(0, 0.175, 0);
     this.scene.add(roundabout);
-    this.addCylinderCollider(roundabout.position, 6, 0.35);
+    // (Roundabout is walk-able terrain, no blocking collider)
 
     // Monument in Roundabout with Bangladesh Flag
     const monumentBaseGeo = new THREE.BoxGeometry(2, 2.5, 2);
