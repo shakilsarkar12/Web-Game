@@ -51,20 +51,35 @@ The year is 2035. An unnatural chemical catastrophe strikes the heart of Dhaka, 
 ### 2. 🔫 5-Tier Weapon Arsenal + Throwables
 | Weapon | Type | Damage | Fire Rate | Mag Size | Special Feature |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Thresher Mk II** | Assault Rifle | 38 | 0.11s | 30 | Full-auto, reflex red-dot sight, balanced recoil |
-| **Shadhinota-12** | Tactical Shotgun | 22 x 7 | 0.65s | 8 | 7-pellet devastating close-range cone spread |
-| **Bengal Viper** | Submachine Gun | 24 | 0.075s | 42 (up to 60) | High-RPM bullet hose, ultra-fast reload |
-| **Padma-50** | Heavy Sniper | 220 | 1.1s | 5 | Anti-material rounds, 2.2x headshot critical multiplier |
-| **Meghna-RPG** | Rocket Launcher | 420 | 1.5s | 1 | Physical rocket projectile with smoke trail, 14m AOE devastation |
+| **Thresher Mk II** | Assault Rifle | 38 | 0.11s | 30 | Full-auto, reflex red-dot sight, vented teak handguard, curved 30-round mag, birdcage flash hider |
+| **Shadhinota-12** | Tactical Shotgun | 22 x 7 | 0.65s | 8 | 7-pellet cone spread, heavy ribbed barrel, under-barrel mag tube, neon-green fiber-optic front bead |
+| **Bengal Viper** | Submachine Gun | 24 | 0.075s | 42 (up to 60) | High-RPM bullet hose, forward-angled curved mag, top Picatinny rail, skeleton folding stock |
+| **Padma-50** | Heavy Sniper | 220 | 1.1s | 5 | Anti-material rounds, 2.2x headshot critical multiplier, multi-chamber arrowhead brake, bipod legs |
+| **Meghna-RPG** | Rocket Launcher | 420 | 1.5s | 1 | Physical rocket projectile with smoke trail, PGO-7 optical sight, loaded PG-7V ogive warhead |
 | **Combat Grenades** | Throwable | 250 | — | 4 (max 6) | Physics bouncing arc trajectory (`G`), 2.2s fuse timer |
 
-### 3. 🎯 Padma-50 Tactical Sniper Scope
+### 3. ✨ Dynamic 3D Muzzle Flashes & Weapon Handling
+- **3D Starburst Muzzle Flash:** Dynamic multi-planar starburst mesh attached to the barrel tip with randomized rotation, scaled according to weapon caliber (e.g. massive flare on .50 cal Sniper & RPG), and synchronized with a point light flash.
+- **Caliber-Specific Recoil Physics:** Tailored spring-recoil impulses with smooth recovery, mouse pan sway damping, and walking/sprinting bobbing.
+- **Third-Person & Top-Down Held Weapon:** When switching to TPS or Top-Down (`V`), the tactical operative visibly carries their firearm in a tactical ready stance, with arms naturally reacting to movement.
+
+### 4. 🧟 5 Articulated Enemy Archetypes & Procedural Animation System
+Each enemy is constructed using a hierarchical anatomical rig with articulated hips, shoulders, and lower jaws, driven by procedural locomotion, flinches, attacks, and ragdoll death:
+- **Street Ghoul (`GHOUL`):** Decayed olive-grey flesh, traditional Dhaka lungi wrap (`0x2b4c6f`), sunken gaping jaw, and asymmetric shambling limp with torso roll and hip bounce.
+- **Rabid Crawler (`RUNNER`):** Aggressive low quadrupedal stance, sinewy crimson hide (`0x7f1d1d`), predatory dorsal spinal cones, and high-frequency scuttling sprint.
+- **Toxic Spitter (`SPITTER`):** Pestilent bile-green flesh, pulsing luminous green acid sac on chest (`0x22c55e`), distended jaw, and wind-up regurgitation pump animation before launching toxic slime.
+- **Dhaka Titan (`BRUTE`):** Massive granite-slate frame (scale 1.65), reinforced concrete pauldron armor on shoulders, heavy stone fists, and earth-stomping gait with high poise.
+- **Gulshan Nightmare Boss (`BOSS`):** Towering demonic entity (scale 2.4), twin curved horn crests, jagged spinal blade fins down the back, overhead dual-arm ground slam shockwave attack, and a fiery crimson enrage transformation at <50% HP.
+- **Procedural Ragdoll Death Collapse:** Upon elimination, enemies procedurally collapse toward the pavement (knees buckling, torso twisting based on ballistic knockback direction, arms splaying outward) before fading into dissolve particles.
+- **Hit Reaction Flinching:** Impacting shots cause an instant flinch reaction with head snap and torso stagger.
+
+### 5. 🎯 Padma-50 Tactical Sniper Scope
 - Right-click ADS zoom switches to a circular high-powered scope overlay with crosshair mil-dots, cyan targeting lines, and sniper breath-hold sound effects.
 
-### 4. 🥋 Quick Melee Combat Strike (`F`)
+### 6. 🥋 Quick Melee Combat Strike (`F`)
 - Instant forward metal kick dealing 75 damage and applying radial knockback to create breathing room when overwhelmed.
 
-### 5. 💥 Floating Combat RPG Damage Text
+### 7. 💥 Floating Combat RPG Damage Text
 - High-performance 2D screen-projected damage markers:
   - 🟡 **Gold:** Critical headshots (`-120 CRIT!`)
   - ⚪ **White:** Standard ballistic hits (`-38`)
@@ -72,23 +87,18 @@ The year is 2035. An unnatural chemical catastrophe strikes the heart of Dhaka, 
   - 🔵 **Cyan:** Melee kick attacks (`-75 🥋`)
   - 🔴 **Crimson:** Vehicle roadkill impacts (`-200 🚗`)
 
-### 6. 🌩️ Dynamic Dhaka Monsoon Thunderstorm
+### 8. 🌩️ Dynamic Dhaka Monsoon Thunderstorm
 - Randomly occurring blinding lightning flashes illuminate the skyline and colonial buildings, accompanied by procedural rolling bass thunderclaps.
 - Toggleable monsoon rain with falling particle streaks, puddle splashes, and wet road surface reflections.
 
-### 7. 🔥 Multikill Combo Streaks
+### 9. 🔥 Multikill Combo Streaks
 - Rapid consecutive kills within 3.2 seconds trigger celebratory banners and audio fanfares:
   - 2 Kills: **🔥 ডাবল কিল! (DOUBLE KILL)**
   - 3 Kills: **⚡ ট্রিপল কিল! (TRIPLE KILL)**
   - 4 Kills: **💥 কোয়াড কিল! (QUAD KILL)**
   - 5+ Kills: **👑 ঢাকাইয়া ডমিনেটর! (DHAKA DOMINATOR)**
 
-### 8. 👹 Gulshan Nightmare Boss with Enrage Phase
-- Spawns in boss waves with an on-screen boss health bar.
-- **Enrage Mode:** At <50% HP, the boss roars, turns fiery red, gains +35% movement speed.
-- **Earthquake Stomp:** Periodically slams the asphalt, creating expanding red ground shockwaves that damage and stagger the player.
-
-### 9. 🎲 Roguelite Level-Up Perks
+### 10. 🎲 Roguelite Level-Up Perks
 After each wave, the player chooses 1 of 3 randomized perks:
 - **Speed Cola:** +25% sprint & walk speed.
 - **Juggernaut:** +35 max HP and immediate full heal.
@@ -97,7 +107,7 @@ After each wave, the player chooses 1 of 3 randomized perks:
 - **Electric Chain Lightning:** Bullets arc 30 electrical damage to nearby foes.
 - **Master Grenadier:** +2 extra grenade capacity.
 
-### 10. 🏪 Maya Tea Stall Armory Shop (`B`)
+### 11. 🏪 Maya Tea Stall Armory Shop (`B`)
 - Exchange earned ৳ Taka for First Aid medkits, Kevlar Armor, Ammo crates, Meghna-RPG rockets, shotgun tuning, SMG drum mags, and emergency Tactical Nuke airstrikes.
 
 ---

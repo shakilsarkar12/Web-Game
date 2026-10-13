@@ -191,7 +191,15 @@ export class GameEngine {
     } else {
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
       this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    }
+
+    if (this.scene) {
+      this.scene.background.setHex(0x8fa6b5);
+      if (this.scene.fog) {
+        this.scene.fog.color.setHex(0x8fa6b5);
+        this.scene.fog.density = 0.007;
+      }
     }
 
     if (this.world) {

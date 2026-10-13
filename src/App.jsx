@@ -90,6 +90,7 @@ export default function App() {
     if (containerRef.current) {
       const engine = new GameEngine(containerRef.current, uiCallbacks);
       gameEngineRef.current = engine;
+      window.gameEngine = engine;
       if (options && options.perspective) {
         engine.player.setPerspective(options.perspective);
       }
