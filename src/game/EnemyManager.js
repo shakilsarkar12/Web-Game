@@ -121,6 +121,273 @@ export class EnemyManager {
     soundEngine.playWaveStart();
   }
 
+  buildEnemyMesh(typeKey, type) {
+    const s = type.scale;
+    const root = new THREE.Group();
+
+    // Archetype-specific color palettes and materials
+    let skinColor = type.color;
+    let clothColor = 0x1e293b;
+    let eyeColor = 0xf87171;
+
+    if (typeKey === 'GHOUL') {
+      skinColor = 0x475549; // Decayed olive-grey flesh
+      clothColor = 0x2b4c6f; // Dhaka traditional lungi blue
+      eyeColor = 0xfb7185;
+    } else if (typeKey === 'RUNNER') {
+      skinColor = 0x7f1d1d; // Ferocious sinewy crimson
+      clothColor = 0x450a0a;
+      eyeColor = 0xfacc15; // Feral predatory yellow eyes
+    } else if (typeKey === 'SPITTER') {
+      skinColor = 0x274e2b; // Bile-toned pestilence green
+      clothColor = 0x14532d;
+      eyeColor = 0x4ade80; // Luminous toxic green eyes
+    } else if (typeKey === 'BRUTE') {
+      skinColor = 0x334155; // Concrete slate hide
+      clothColor = 0x1e293b;
+      eyeColor = 0xf97316; // Blazing molten amber eyes
+    } else if (typeKey === 'BOSS') {
+      skinColor = 0x18181b; // Obsidian demonic flesh
+      clothColor = 0x7f1d1d;
+      eyeColor = 0xef4444; // Demonic crimson eyes
+    }
+
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: skinColor,
+      roughness: typeKey === 'SPITTER' ? 0.35 : 0.75,
+      metalness: typeKey === 'BRUTE' ? 0.25 : 0.05
+    });
+
+    const clothMat = new THREE.MeshStandardMaterial({
+      color: clothColor,
+      roughness: 0.85
+    });
+
+    // 1. Torso Group (pivoted at hip height for natural sway and bounce)
+    const torsoGroup = new THREE.Group();
+    const hipY = 0.9 * s;
+    torsoGroup.position.set(0, hipY, 0);
+    root.add(torsoGroup);
+
+    // Torso Dimensions by archetype
+    let torsoWidth = 0.65 * s;
+    let torsoHeight = 0.85 * s;
+    let torsoDepth = 0.42 * s;
+
+    if (typeKey === 'BRUTE') {
+      torsoWidth = 1.15 * s;
+      torsoHeight = 1.1 * s;
+      torsoDepth = 0.65 * s;
+    } else if (typeKey === 'BOSS') {
+      torsoWidth = 1.05 * s;
+      torsoHeight = 1.2 * s;
+      torsoDepth = 0.6 * s;
+    } else if (typeKey === 'RUNNER') {
+      torsoWidth = 0.52 * s;
+      torsoHeight = 0.72 * s;
+      torsoDepth = 0.55 * s;
+      torsoGroup.rotation.x = 0.35; // Hunched predatory forward posture
+    }
+
+    const torsoMesh = new THREE.Mesh(new THREE.BoxGeometry(torsoWidth, torsoHeight, torsoDepth), skinMat);
+    torsoMesh.position.set(0, torsoHeight * 0.5, 0);
+    torsoGroup.add(torsoMesh);
+
+    // Dhaka Traditional Lungi Wrap for GHOUL
+    let lungi = null;
+    if (typeKey === 'GHOUL') {
+      lungi = new THREE.Mesh(
+        new THREE.BoxGeometry(0.72 * s, 0.52 * s, 0.48 * s),
+        clothMat
+      );
+      lungi.position.set(0, 0.15 * s, 0);
+      torsoGroup.add(lungi);
+    }
+
+    // Concrete Pauldron Armor & Rebar Spikes for BRUTE
+    let pauldrons = [];
+    if (typeKey === 'BRUTE') {
+      const pauldronMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.85, metalness: 0.35 });
+      const pauldronGeo = new THREE.BoxGeometry(0.48 * s, 0.32 * s, 0.58 * s);
+      const pauldronL = new THREE.Mesh(pauldronGeo, pauldronMat);
+      pauldronL.position.set(-0.68 * s, torsoHeight * 0.88, 0);
+      pauldronL.rotation.z = -0.28;
+      torsoGroup.add(pauldronL);
+
+      const pauldronR = new THREE.Mesh(pauldronGeo, pauldronMat);
+      pauldronR.position.set(0.68 * s, torsoHeight * 0.88, 0);
+      pauldronR.rotation.z = 0.28;
+      torsoGroup.add(pauldronR);
+
+      pauldrons = [pauldronL, pauldronR];
+    }
+
+    // Pulsing Luminous Toxic Acid Sac on Chest for SPITTER
+    let acidSac = null;
+    if (typeKey === 'SPITTER') {
+      const acidMat = new THREE.MeshStandardMaterial({
+        color: 0x22c55e,
+        emissive: 0x15803d,
+        emissiveIntensity: 0.85,
+        roughness: 0.2,
+        transparent: true,
+        opacity: 0.92
+      });
+      acidSac = new THREE.Mesh(new THREE.SphereGeometry(0.32 * s, 12, 10), acidMat);
+      acidSac.position.set(0, torsoHeight * 0.6, 0.26 * s);
+      torsoGroup.add(acidSac);
+    }
+
+    // Dorsal Spines / Blade Crests for RUNNER & BOSS
+    let spines = [];
+    if (typeKey === 'RUNNER' || typeKey === 'BOSS') {
+      const spineMat = new THREE.MeshStandardMaterial({
+        color: typeKey === 'BOSS' ? 0x991b1b : 0x1f2937,
+        roughness: 0.5
+      });
+      const numSpines = typeKey === 'BOSS' ? 5 : 4;
+      for (let sp = 0; sp < numSpines; sp++) {
+        const spineCone = new THREE.Mesh(
+          new THREE.ConeGeometry(0.08 * s, 0.32 * s, 5),
+          spineMat
+        );
+        spineCone.rotation.x = -Math.PI / 3;
+        spineCone.position.set(0, 0.2 * s + sp * 0.18 * s, -torsoDepth * 0.52);
+        torsoGroup.add(spineCone);
+        spines.push(spineCone);
+      }
+    }
+
+    // 2. Head Group (pivoted at neck atop torso)
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, torsoHeight, 0);
+    torsoGroup.add(headGroup);
+
+    let headSize = 0.42 * s;
+    if (typeKey === 'BRUTE') headSize = 0.52 * s;
+    if (typeKey === 'BOSS') headSize = 0.56 * s;
+    if (typeKey === 'RUNNER') headSize = 0.38 * s;
+
+    const headMat = new THREE.MeshStandardMaterial({
+      color: typeKey === 'BOSS' ? 0x09090b : skinColor,
+      roughness: 0.6
+    });
+    const headMesh = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMat);
+    headMesh.position.set(0, headSize * 0.5, 0);
+    headGroup.add(headMesh);
+
+    // Glowing Demonic / Infected Eyes
+    const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+    const eyeRadius = 0.055 * s;
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(eyeRadius, 8, 8), eyeMat);
+    eyeL.position.set(-headSize * 0.28, headSize * 0.55, headSize * 0.52);
+    headGroup.add(eyeL);
+
+    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(eyeRadius, 8, 8), eyeMat);
+    eyeR.position.set(headSize * 0.28, headSize * 0.55, headSize * 0.52);
+    headGroup.add(eyeR);
+
+    // Articulated Lower Jaw (drops on attacks, roars, and slime spits)
+    const jawMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.7 });
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(headSize * 0.85, headSize * 0.22, headSize * 0.75), jawMat);
+    jaw.position.set(0, headSize * 0.1, headSize * 0.15);
+    headGroup.add(jaw);
+
+    // Boss Demonic Curved Horns
+    let horns = [];
+    if (typeKey === 'BOSS') {
+      const hornMat = new THREE.MeshStandardMaterial({
+        color: 0x991b1b,
+        emissive: 0x450a0a,
+        roughness: 0.4
+      });
+      const hornL = new THREE.Mesh(new THREE.ConeGeometry(0.12 * s, 0.65 * s, 6), hornMat);
+      hornL.position.set(-headSize * 0.48, headSize * 0.95, -0.05 * s);
+      hornL.rotation.z = 0.55;
+      hornL.rotation.x = -0.25;
+      headGroup.add(hornL);
+
+      const hornR = new THREE.Mesh(new THREE.ConeGeometry(0.12 * s, 0.65 * s, 6), hornMat);
+      hornR.position.set(headSize * 0.48, headSize * 0.95, -0.05 * s);
+      hornR.rotation.z = -0.55;
+      hornR.rotation.x = -0.25;
+      headGroup.add(hornR);
+
+      horns = [hornL, hornR];
+    }
+
+    // 3. Left & Right Arm Groups (pivoted at shoulder joints)
+    const armWidth = (typeKey === 'BRUTE' ? 0.35 : 0.22) * s;
+    const armLength = (typeKey === 'BRUTE' ? 0.95 : 0.82) * s;
+    const armMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.7 });
+
+    const armL = new THREE.Group();
+    armL.position.set(-(torsoWidth * 0.5 + armWidth * 0.55), torsoHeight * 0.9, 0);
+    const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(armWidth, armLength, armWidth), armMat);
+    armLMesh.position.set(0, -armLength * 0.5, 0);
+    armL.add(armLMesh);
+    torsoGroup.add(armL);
+
+    const armR = new THREE.Group();
+    armR.position.set(torsoWidth * 0.5 + armWidth * 0.55, torsoHeight * 0.9, 0);
+    const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(armWidth, armLength, armWidth), armMat);
+    armRMesh.position.set(0, -armLength * 0.5, 0);
+    armR.add(armRMesh);
+    torsoGroup.add(armR);
+
+    // Massive Stone Knuckles / Reinforced Fists for BRUTE
+    if (typeKey === 'BRUTE') {
+      const fistMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
+      const fistL = new THREE.Mesh(new THREE.BoxGeometry(0.42 * s, 0.36 * s, 0.42 * s), fistMat);
+      fistL.position.set(0, -armLength, 0);
+      armL.add(fistL);
+
+      const fistR = new THREE.Mesh(new THREE.BoxGeometry(0.42 * s, 0.36 * s, 0.42 * s), fistMat);
+      fistR.position.set(0, -armLength, 0);
+      armR.add(fistR);
+    }
+
+    // 4. Left & Right Leg Groups (pivoted at hip joints on root)
+    const legWidth = (typeKey === 'BRUTE' ? 0.35 : 0.24) * s;
+    const legLength = 0.9 * s;
+    const legMat = new THREE.MeshStandardMaterial({ color: clothColor, roughness: 0.8 });
+
+    const legL = new THREE.Group();
+    legL.position.set(-torsoWidth * 0.28, hipY, 0);
+    const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(legWidth, legLength, legWidth), legMat);
+    legLMesh.position.set(0, -legLength * 0.5, 0);
+    legL.add(legLMesh);
+    root.add(legL);
+
+    const legR = new THREE.Group();
+    legR.position.set(torsoWidth * 0.28, hipY, 0);
+    const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(legWidth, legLength, legWidth), legMat);
+    legRMesh.position.set(0, -legLength * 0.5, 0);
+    legR.add(legRMesh);
+    root.add(legR);
+
+    return {
+      group: root,
+      torsoGroup,
+      torsoMesh,
+      lungi,
+      headGroup,
+      headMesh,
+      jaw,
+      eyeL,
+      eyeR,
+      armL,
+      armR,
+      legL,
+      legR,
+      acidSac,
+      spines,
+      pauldrons,
+      horns,
+      baseTorsoY: hipY
+    };
+  }
+
   spawnEnemy(typeKey) {
     const type = ENEMY_TYPES[typeKey] || ENEMY_TYPES.GHOUL;
     const spawnPt = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
@@ -129,72 +396,37 @@ export class EnemyManager {
     const spawnX = spawnPt.x + (Math.random() - 0.5) * 8;
     const spawnZ = spawnPt.z + (Math.random() - 0.5) * 8;
 
-    // 3D Enemy Mesh Group
-    const group = new THREE.Group();
-    const s = type.scale;
-
-    // Torso
-    const torsoMat = new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.7 });
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7 * s, 1.0 * s, 0.45 * s), torsoMat);
-    torso.position.y = 1.3 * s;
-    group.add(torso);
-
-    // Head
-    const headMat = new THREE.MeshStandardMaterial({ color: 0x1a202c, roughness: 0.5 });
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5 * s, 0.5 * s, 0.5 * s), headMat);
-    head.position.y = 2.05 * s;
-    group.add(head);
-
-    // Glowing Red/Green Demonic Eyes
-    const eyeMat = new THREE.MeshBasicMaterial({ color: typeKey === 'SPITTER' ? 0x48bb78 : 0xf56565 });
-    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06 * s, 6, 6), eyeMat);
-    eyeL.position.set(-0.14 * s, 2.1 * s, 0.26 * s);
-    group.add(eyeL);
-
-    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.06 * s, 6, 6), eyeMat);
-    eyeR.position.set(0.14 * s, 2.1 * s, 0.26 * s);
-    group.add(eyeR);
-
-    // Left Arm & Right Arm (for procedural attack & walk swing)
-    const armMat = new THREE.MeshStandardMaterial({ color: type.color });
-    const armGeo = new THREE.BoxGeometry(0.22 * s, 0.8 * s, 0.22 * s);
-
-    const armL = new THREE.Mesh(armGeo, armMat);
-    armL.position.set(-0.48 * s, 1.2 * s, 0);
-    group.add(armL);
-
-    const armR = new THREE.Mesh(armGeo, armMat);
-    armR.position.set(0.48 * s, 1.2 * s, 0);
-    group.add(armR);
-
-    // Left Leg & Right Leg
-    const legGeo = new THREE.BoxGeometry(0.25 * s, 0.9 * s, 0.25 * s);
-    const legL = new THREE.Mesh(legGeo, torsoMat);
-    legL.position.set(-0.22 * s, 0.45 * s, 0);
-    group.add(legL);
-
-    const legR = new THREE.Mesh(legGeo, torsoMat);
-    legR.position.set(0.22 * s, 0.45 * s, 0);
-    group.add(legR);
-
-    group.position.set(spawnX, 0, spawnZ);
-    this.scene.add(group);
+    const meshData = this.buildEnemyMesh(typeKey, type);
+    meshData.group.position.set(spawnX, 0, spawnZ);
+    this.scene.add(meshData.group);
 
     const enemy = {
       id: Math.random().toString(36).substring(7),
       type: typeKey,
       typeData: type,
-      mesh: group,
-      position: group.position,
-      armL,
-      armR,
-      legL,
-      legR,
+      mesh: meshData.group,
+      position: meshData.group.position,
+      torsoGroup: meshData.torsoGroup,
+      headGroup: meshData.headGroup,
+      jaw: meshData.jaw,
+      acidSac: meshData.acidSac,
+      spines: meshData.spines,
+      horns: meshData.horns,
+      armL: meshData.armL,
+      armR: meshData.armR,
+      legL: meshData.legL,
+      legR: meshData.legR,
+      baseTorsoY: meshData.baseTorsoY,
       hp: type.hp,
       maxHp: type.hp,
       speed: type.speed,
       damage: type.damage,
       isAlive: true,
+      isDying: false,
+      deathProgress: 0,
+      deathFallDir: 1,
+      flinchTimer: 0,
+      attackTimer: 0,
       lastAttackTime: 0,
       animTime: Math.random() * 10
     };
@@ -277,9 +509,51 @@ export class EnemyManager {
     // 3. Enemy AI, Movement & Combat
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i];
+
+      // Procedural Ragdoll Collapse on Death
+      if (e.isDying) {
+        e.deathProgress += delta * 1.35;
+        const t = Math.min(1.0, e.deathProgress);
+
+        // Hips drop to pavement
+        e.mesh.position.y = THREE.MathUtils.lerp(0, 0.12 * e.typeData.scale, t);
+
+        // Knees buckle
+        e.legL.rotation.x = THREE.MathUtils.lerp(e.legL.rotation.x, -1.2, t);
+        e.legR.rotation.x = THREE.MathUtils.lerp(e.legR.rotation.x, -1.1, t);
+
+        // Torso collapses forward or backward based on knockback direction
+        const targetTorsoX = (e.deathFallDir || 1) * 1.35;
+        e.torsoGroup.rotation.x = THREE.MathUtils.lerp(e.torsoGroup.rotation.x, targetTorsoX, t);
+        e.torsoGroup.rotation.z = THREE.MathUtils.lerp(e.torsoGroup.rotation.z, 0.45, t);
+
+        // Arms go limp and splay outwards
+        e.armL.rotation.x = THREE.MathUtils.lerp(e.armL.rotation.x, 0.6, t);
+        e.armL.rotation.z = THREE.MathUtils.lerp(e.armL.rotation.z, -0.65, t);
+        e.armR.rotation.x = THREE.MathUtils.lerp(e.armR.rotation.x, 0.6, t);
+        e.armR.rotation.z = THREE.MathUtils.lerp(e.armR.rotation.z, 0.65, t);
+
+        // Head droops
+        if (e.headGroup) {
+          e.headGroup.rotation.x = THREE.MathUtils.lerp(e.headGroup.rotation.x, 0.65, t);
+        }
+        continue;
+      }
+
       if (!e.isAlive) continue;
 
-      e.animTime += delta * e.speed * 2.5;
+      // Hit Flinch Recovery
+      if (e.flinchTimer > 0) {
+        e.flinchTimer -= delta;
+        const flinchFactor = Math.sin(Math.max(0, e.flinchTimer / 0.18) * Math.PI);
+        if (e.headGroup) e.headGroup.rotation.x = -flinchFactor * 0.45;
+        if (e.torsoGroup) e.torsoGroup.rotation.x = -flinchFactor * 0.2;
+      }
+
+      // Attack Animation Timer
+      if (e.attackTimer > 0) {
+        e.attackTimer -= delta;
+      }
 
       // Direction vector to player
       this._toPlayer.subVectors(playerPosition, e.position);
@@ -291,12 +565,83 @@ export class EnemyManager {
       this._lookTarget.set(playerPosition.x, e.position.y, playerPosition.z);
       e.mesh.lookAt(this._lookTarget);
 
-      // Procedural walking animation
-      const swing = Math.sin(e.animTime) * 0.6;
-      e.legL.rotation.x = swing;
-      e.legR.rotation.x = -swing;
-      e.armL.rotation.x = -swing;
-      e.armR.rotation.x = swing;
+      // Archetype-Specific Locomotion Animations
+      e.animTime += delta * e.speed * (e.type === 'RUNNER' ? 3.2 : 2.0);
+
+      if (e.type === 'GHOUL') {
+        // Asymmetric shambling limp
+        const swingL = Math.sin(e.animTime) * 0.65;
+        const swingR = Math.sin(e.animTime + 0.3) * -0.55;
+        e.legL.rotation.x = swingL;
+        e.legR.rotation.x = swingR;
+        e.armL.rotation.x = -swingL * 0.8;
+        e.armR.rotation.x = -swingR * 0.8;
+
+        // Torso roll and hip bob
+        e.torsoGroup.rotation.z = Math.sin(e.animTime) * 0.1;
+        e.torsoGroup.position.y = e.baseTorsoY + Math.abs(Math.sin(e.animTime)) * 0.06 * e.typeData.scale;
+      } else if (e.type === 'RUNNER') {
+        // Low predatory quadrupedal scuttling sprint
+        const swing = Math.sin(e.animTime) * 0.85;
+        e.legL.rotation.x = swing;
+        e.legR.rotation.x = -swing;
+        e.armL.rotation.x = -swing * 1.1;
+        e.armR.rotation.x = swing * 1.1;
+
+        e.torsoGroup.rotation.x = 0.45 + Math.sin(e.animTime * 2) * 0.08;
+        e.torsoGroup.position.y = e.baseTorsoY + Math.abs(Math.sin(e.animTime)) * 0.05 * e.typeData.scale;
+      } else if (e.type === 'SPITTER') {
+        // Cautious stalking gait + pulsing acid sac
+        const swing = Math.sin(e.animTime) * 0.5;
+        e.legL.rotation.x = swing;
+        e.legR.rotation.x = -swing;
+        e.armL.rotation.x = -swing * 0.7;
+        e.armR.rotation.x = swing * 0.7;
+
+        if (e.acidSac) {
+          const sacPulse = 1.0 + Math.sin(e.animTime * 3.5) * 0.12;
+          e.acidSac.scale.set(sacPulse, sacPulse, sacPulse);
+        }
+      } else if (e.type === 'BRUTE') {
+        // Heavy stomping walk with ground impact feel
+        const swing = Math.sin(e.animTime) * 0.45;
+        e.legL.rotation.x = swing;
+        e.legR.rotation.x = -swing;
+        e.armL.rotation.x = -swing * 0.6;
+        e.armR.rotation.x = swing * 0.6;
+
+        e.torsoGroup.rotation.z = Math.sin(e.animTime) * 0.12;
+        e.torsoGroup.position.y = e.baseTorsoY + Math.abs(Math.sin(e.animTime)) * 0.08 * e.typeData.scale;
+      } else if (e.type === 'BOSS') {
+        // Authoritative intimidating demonic stride
+        const swing = Math.sin(e.animTime) * 0.55;
+        e.legL.rotation.x = swing;
+        e.legR.rotation.x = -swing;
+        e.armL.rotation.x = -swing * 0.75;
+        e.armR.rotation.x = swing * 0.75;
+
+        e.torsoGroup.rotation.z = Math.sin(e.animTime) * 0.08;
+        e.torsoGroup.position.y = e.baseTorsoY + Math.abs(Math.sin(e.animTime)) * 0.1 * e.typeData.scale;
+      }
+
+      // Dynamic Attack Wind-Up, Slash, and Recovery
+      if (e.attackTimer > 0) {
+        const attackNorm = 1.0 - (e.attackTimer / 0.55); // 0 to 1
+        if (attackNorm < 0.35) {
+          // Wind-up: arms pull back, torso arches, jaw drops open
+          const pullBack = -0.5 - attackNorm * 2.2;
+          e.armL.rotation.x = pullBack;
+          e.armR.rotation.x = pullBack;
+          if (e.jaw) e.jaw.rotation.x = 0.35;
+        } else {
+          // Forward strike & recovery
+          const strikeT = (attackNorm - 0.35) / 0.65;
+          const strikeAngle = -Math.PI * 0.65 * (1.0 - strikeT);
+          e.armL.rotation.x = strikeAngle;
+          e.armR.rotation.x = strikeAngle;
+          if (e.jaw) e.jaw.rotation.x = 0.35 * (1.0 - strikeT);
+        }
+      }
 
       // Enemy behavior by type
       if (e.type === 'BOSS') {
@@ -307,8 +652,12 @@ export class EnemyManager {
           e.speed = e.typeData.speed * 1.35;
           soundEngine.playBossRoar();
           e.mesh.traverse(c => {
-            if (c.isMesh && c.material && c.material.color) {
-              c.material.color.setHex(0xb91c1c);
+            if (c.isMesh && c.material) {
+              if (c.material.color) c.material.color.setHex(0xb91c1c);
+              if (c.material.emissive) {
+                c.material.emissive.setHex(0x7f1d1d);
+                c.material.emissiveIntensity = 0.6;
+              }
             }
           });
         }
@@ -317,6 +666,10 @@ export class EnemyManager {
         e.lastSlamTime = e.lastSlamTime || 0;
         if (now - e.lastSlamTime > 5.5 && dist < 12) {
           e.lastSlamTime = now;
+          e.attackTimer = 0.8;
+          // Overhead dual arm slam wind-up
+          e.armL.rotation.x = -2.6;
+          e.armR.rotation.x = -2.6;
           if (particleSystem) {
             particleSystem.spawnShockwave(e.position);
           }
@@ -328,9 +681,14 @@ export class EnemyManager {
       }
 
       if (e.type === 'SPITTER' && dist < 16 && dist > 7) {
-        // Spitter keeps distance and shoots toxic balls
+        // Spitter keeps distance and shoots toxic balls with regurgitation wind-up
         if (now - e.lastAttackTime > e.typeData.attackCooldown) {
           e.lastAttackTime = now;
+          e.attackTimer = 0.5;
+          if (e.acidSac) {
+            e.acidSac.scale.set(1.4, 1.4, 1.4);
+          }
+          if (e.jaw) e.jaw.rotation.x = 0.45;
           this.shootToxicSlime(e.position, playerPosition);
         }
       } else {
@@ -370,9 +728,7 @@ export class EnemyManager {
           // In attack range - Melee Attack
           if (now - e.lastAttackTime > e.typeData.attackCooldown) {
             e.lastAttackTime = now;
-            // Attack animation (arm swipe forward)
-            e.armL.rotation.x = -Math.PI / 2;
-            e.armR.rotation.x = -Math.PI / 2;
+            e.attackTimer = 0.55;
 
             onPlayerDamaged(e.damage);
             soundEngine.playZombieSound('hit');
@@ -450,6 +806,9 @@ export class EnemyManager {
     enemy.hp -= amount;
     soundEngine.playHitmarker(isHeadshot);
 
+    // Trigger hit flinch reaction
+    enemy.flinchTimer = 0.18;
+
     if (onDamageText) {
       this._tempPos.copy(enemy.position);
       this._tempPos.y += 1.8;
@@ -465,6 +824,7 @@ export class EnemyManager {
       this._pushVec.copy(knockbackDir).normalize().multiplyScalar(2.0);
       this._pushVec.y = 0;
       enemy.position.add(this._pushVec);
+      enemy.deathFallDir = -1; // Fall backwards from knockback
     }
 
     // Flash white on hit
@@ -484,17 +844,20 @@ export class EnemyManager {
   }
 
   killEnemy(enemy, isHeadshot, onEnemyKilled, particleSystem) {
+    if (!enemy.isAlive && enemy.isDying) return; // Prevent double execution
     enemy.isAlive = false;
+    enemy.isDying = true;
+    enemy.deathProgress = 0;
+    if (!enemy.deathFallDir) {
+      enemy.deathFallDir = Math.random() > 0.4 ? 1 : -1;
+    }
+
     soundEngine.playZombieSound('death');
 
     // Spawn explosion / dissolve particles
     if (particleSystem) {
       particleSystem.spawnDeathParticles(enemy.position, enemy.typeData.color);
     }
-
-    // Death tilt animation
-    enemy.mesh.rotation.x = Math.PI / 2;
-    enemy.position.y = 0.2;
 
     const timerId = setTimeout(() => {
       this.deathTimers.delete(timerId);
@@ -507,8 +870,10 @@ export class EnemyManager {
 
     this.deathTimers.add(timerId);
 
-    // Trigger reward & drop
-    onEnemyKilled(enemy, isHeadshot);
+    // Trigger reward & drop immediately
+    if (onEnemyKilled) {
+      onEnemyKilled(enemy, isHeadshot);
+    }
   }
 
   disposeEnemy(enemy) {

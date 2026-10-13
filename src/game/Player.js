@@ -93,6 +93,32 @@ export class Player {
     this.armR.position.set(0.45, 1.25, 0);
     group.add(this.armR);
 
+    // Held Rifle in right hand for third-person & top-down view
+    const heldWeapon = new THREE.Group();
+    const gunSteelMat = new THREE.MeshStandardMaterial({ color: 0x1e242d, metalness: 0.85, roughness: 0.3 });
+    const gunWoodMat = new THREE.MeshStandardMaterial({ color: 0x7c4a27, roughness: 0.7 });
+
+    const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.45), gunSteelMat);
+    heldWeapon.add(gunBody);
+
+    const gunBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.45, 8), gunSteelMat);
+    gunBarrel.rotation.x = Math.PI / 2;
+    gunBarrel.position.set(0, 0.02, -0.4);
+    heldWeapon.add(gunBarrel);
+
+    const gunHandguard = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.085, 0.22), gunWoodMat);
+    gunHandguard.position.set(0, -0.01, -0.25);
+    heldWeapon.add(gunHandguard);
+
+    const gunMag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.09), gunSteelMat);
+    gunMag.position.set(0, -0.12, -0.05);
+    gunMag.rotation.x = 0.25;
+    heldWeapon.add(gunMag);
+
+    heldWeapon.position.set(0, -0.32, 0.2);
+    heldWeapon.rotation.set(-0.35, 0, 0);
+    this.armR.add(heldWeapon);
+
     // Legs
     const legMat = new THREE.MeshStandardMaterial({ color: 0x2d3748 });
     this.legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), legMat);
@@ -237,13 +263,15 @@ export class Player {
         const legSwing = Math.sin(this.walkAnimTime) * 0.65;
         if (this.legL) this.legL.rotation.x = legSwing;
         if (this.legR) this.legR.rotation.x = -legSwing;
-        if (this.armL) this.armL.rotation.x = -legSwing * 0.6;
-        if (this.armR) this.armR.rotation.x = legSwing * 0.6;
+        // Tactical ready stance: right arm raises rifle forward, left arm braces handguard
+        if (this.armR) this.armR.rotation.set(-0.75 + Math.sin(this.walkAnimTime) * 0.08, 0, 0);
+        if (this.armL) this.armL.rotation.set(-0.72 + Math.sin(this.walkAnimTime) * 0.08, 0.35, 0);
       } else {
         if (this.legL) this.legL.rotation.x = 0;
         if (this.legR) this.legR.rotation.x = 0;
-        if (this.armL) this.armL.rotation.x = 0;
-        if (this.armR) this.armR.rotation.x = 0;
+        // Idle tactical ready stance
+        if (this.armR) this.armR.rotation.set(-0.75, 0, 0);
+        if (this.armL) this.armL.rotation.set(-0.72, 0.35, 0);
       }
     }
 
