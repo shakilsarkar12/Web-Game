@@ -54,6 +54,19 @@ export const WEAPON_TYPES = {
     pellets: 1,
     spread: 0.002,
     auto: false
+  },
+  ROCKET: {
+    id: 'rocket',
+    name: 'Meghna-RPG',
+    subname: 'Rocket Launcher',
+    damage: 420,
+    fireRate: 1.5,
+    magSize: 1,
+    reloadTime: 2.7,
+    range: 180,
+    pellets: 1,
+    spread: 0.002,
+    auto: false
   }
 };
 
@@ -71,15 +84,19 @@ export class WeaponSystem {
       RIFLE: { current: 30, reserve: 180 },
       SHOTGUN: { current: 8, reserve: 48 },
       SMG: { current: 42, reserve: 210 },
-      SNIPER: { current: 5, reserve: 25 }
+      SNIPER: { current: 5, reserve: 25 },
+      ROCKET: { current: 1, reserve: 6 }
     };
 
-    // Grenades
+    // Grenades & Rockets
     this.grenades = 4;
     this.activeGrenades = [];
+    this.activeRockets = [];
 
     // Weapon timing
     this.lastShotTime = 0;
+    this.lastMeleeTime = 0;
+    this.cameraShake = 0;
     this.isReloading = false;
     this.reloadProgress = 0;
     this.isADS = false;
@@ -203,6 +220,39 @@ export class WeaponSystem {
 
     this.gunMeshes.SNIPER = snipGroup;
     this.gunGroup.add(snipGroup);
+
+    // --- 5. ROCKET (Meghna-RPG) ---
+    const rpgGroup = new THREE.Group();
+    const rpgMat = new THREE.MeshStandardMaterial({ color: 0x274e13, roughness: 0.5, metalness: 0.5 });
+    const woodGripMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.8 });
+    const warheadMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.4 });
+
+    // Main Tube
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.85, 12), rpgMat);
+    tube.rotation.x = Math.PI / 2;
+    tube.position.set(0, 0, -0.2);
+    rpgGroup.add(tube);
+
+    // Rear conical exhaust
+    const exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.16, 12), rpgMat);
+    exhaust.rotation.x = -Math.PI / 2;
+    exhaust.position.set(0, 0, 0.28);
+    rpgGroup.add(exhaust);
+
+    // Grip & Trigger
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.06), woodGripMat);
+    grip.position.set(0, -0.1, -0.05);
+    grip.rotation.x = 0.2;
+    rpgGroup.add(grip);
+
+    // Loaded RPG Warhead
+    const warhead = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 12), warheadMat);
+    warhead.rotation.x = Math.PI / 2;
+    warhead.position.set(0, 0, -0.72);
+    rpgGroup.add(warhead);
+
+    this.gunMeshes.ROCKET = rpgGroup;
+    this.gunGroup.add(rpgGroup);
   }
 
   switchWeapon(key) {
@@ -220,7 +270,55 @@ export class WeaponSystem {
   }
 
   setADS(isAiming) {
+    const wasADS = this.isADS;
     this.isADS = isAiming;
+    if (!wasADS && isAiming && this.currentWeaponKey === 'SNIPER') {
+      soundEngine.playSniperBreath();
+    }
+  }
+
+  // Quick Melee Attack (Kick / Combat Knife, F key)
+  melee(currentTime, playerPosition, cameraDirection, enemies, particleSystem) {
+    if (currentTime - this.lastMeleeTime < 0.6) return null;
+    this.lastMeleeTime = currentTime;
+
+    let didHit = false;
+    const hitEnemies = [];
+    const meleeRange = 3.0;
+
+    if (enemies && enemies.length > 0) {
+      for (let e of enemies) {
+        if (e.isAlive) {
+          const toEnemy = new THREE.Vector3().subVectors(e.position, playerPosition);
+          const dist = toEnemy.length();
+          toEnemy.normalize();
+          const dot = cameraDirection.dot(toEnemy);
+
+          // In front of player within cone and range
+          if (dist <= meleeRange && dot > 0.4) {
+            didHit = true;
+            hitEnemies.push({
+              enemy: e,
+              damage: 75,
+              isHeadshot: false,
+              knockbackDir: toEnemy.clone()
+            });
+
+            if (particleSystem) {
+              particleSystem.spawnBlood(e.position.clone().add(new THREE.Vector3(0, 1.2, 0)), toEnemy);
+            }
+          }
+        }
+      }
+    }
+
+    soundEngine.playMelee(didHit);
+
+    // Melee thrust recoil
+    this.recoilOffset.z = 0.16;
+    this.cameraShake = 0.04;
+
+    return hitEnemies;
   }
 
   // Shoot weapon (returns hits for damage calculation)
@@ -252,16 +350,48 @@ export class WeaponSystem {
     this.muzzleLight.intensity = 4.0;
     this.muzzleLightTimer = 0.06;
 
+    // Camera recoil shake
+    this.cameraShake = this.isADS ? 0.015 : 0.035;
+
+    // Eject brass cartridge
+    const origin = new THREE.Vector3();
+    this.camera.getWorldPosition(origin);
+    if (particleSystem) {
+      particleSystem.spawnShellCasing(origin, this.camera.rotation);
+    }
+
     // Apply Recoil Kick
     const kickZ = this.isADS ? 0.06 : 0.12;
     const kickRot = this.isADS ? 0.04 : 0.09;
     this.recoilOffset.z = kickZ;
     this.recoilRotation.x = kickRot;
 
+    // Meghna-RPG Rocket Launching
+    if (this.currentWeaponKey === 'ROCKET') {
+      this.cameraShake = 0.08;
+      const rocketGeo = new THREE.ConeGeometry(0.08, 0.35, 8);
+      const rocketMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, metalness: 0.6 });
+      const rocketMesh = new THREE.Mesh(rocketGeo, rocketMat);
+      rocketMesh.rotation.x = Math.PI / 2;
+      rocketMesh.position.copy(origin);
+      this.scene.add(rocketMesh);
+
+      const dir = new THREE.Vector3(0, 0, -1);
+      dir.unproject(this.camera);
+      dir.sub(origin).normalize();
+
+      this.activeRockets.push({
+        mesh: rocketMesh,
+        position: origin.clone(),
+        velocity: dir.clone().multiplyScalar(46),
+        direction: dir.clone(),
+        life: 3.5
+      });
+      return [];
+    }
+
     // Raycast Shooting logic
     const hits = [];
-    const origin = new THREE.Vector3();
-    this.camera.getWorldPosition(origin);
 
     for (let p = 0; p < w.pellets; p++) {
       // Calculate spread direction
@@ -274,6 +404,7 @@ export class WeaponSystem {
       dir.sub(origin).normalize();
 
       const raycaster = new THREE.Raycaster(origin, dir, 0.1, w.range);
+      let hitTarget = false;
 
       // 1. Check Explosive Barrels
       if (barrels && barrels.length > 0) {
@@ -282,6 +413,7 @@ export class WeaponSystem {
             const bIntersects = raycaster.intersectObject(b.mesh, false);
             if (bIntersects.length > 0) {
               hits.push({ type: 'barrel', target: b, point: bIntersects[0].point });
+              hitTarget = true;
               break;
             }
           }
@@ -289,7 +421,7 @@ export class WeaponSystem {
       }
 
       // 2. Check Enemies
-      if (enemies && enemies.length > 0) {
+      if (!hitTarget && enemies && enemies.length > 0) {
         for (let e of enemies) {
           if (e.isAlive && e.mesh) {
             const intersects = raycaster.intersectObjects(e.mesh.children.length ? e.mesh.children : [e.mesh], true);
@@ -307,6 +439,8 @@ export class WeaponSystem {
                 point: hitPoint
               });
 
+              hitTarget = true;
+
               // Blood splatter particle
               if (particleSystem) {
                 particleSystem.spawnBlood(hitPoint, dir);
@@ -315,6 +449,12 @@ export class WeaponSystem {
             }
           }
         }
+      }
+
+      // 3. World / Environment impact (sparks and dust on missed shots)
+      if (!hitTarget && particleSystem) {
+        const impactPt = origin.clone().addScaledVector(dir, Math.min(30, w.range));
+        particleSystem.spawnConcreteImpact(impactPt);
       }
 
       // Spawn bullet tracer particle
@@ -367,7 +507,7 @@ export class WeaponSystem {
     return true;
   }
 
-  update(delta, mouseDeltaX, mouseDeltaY, isMoving, isSprinting) {
+  update(delta, mouseDeltaX, mouseDeltaY, isMoving, isSprinting, particleSystem = null, enemies = null) {
     // 1. Muzzle Flash Decay
     if (this.muzzleLightTimer > 0) {
       this.muzzleLightTimer -= delta;
@@ -472,6 +612,41 @@ export class WeaponSystem {
       }
     }
 
-    return explodedGrenades;
+    // 8. Update Active Meghna-RPG Rockets
+    const explodedRockets = [];
+    for (let i = this.activeRockets.length - 1; i >= 0; i--) {
+      const r = this.activeRockets[i];
+      r.life -= delta;
+      r.position.addScaledVector(r.velocity, delta);
+      r.mesh.position.copy(r.position);
+      r.mesh.lookAt(r.position.clone().add(r.direction));
+
+      if (particleSystem) {
+        particleSystem.spawnRocketSmoke(r.position);
+      }
+
+      let hit = r.life <= 0 || r.position.y <= 0.25;
+
+      if (!hit && enemies && enemies.length > 0) {
+        for (let e of enemies) {
+          if (e.isAlive && e.position.distanceTo(r.position) < 2.0) {
+            hit = true;
+            break;
+          }
+        }
+      }
+
+      if (hit) {
+        explodedRockets.push(r.position.clone());
+        this.scene.remove(r.mesh);
+        this.activeRockets.splice(i, 1);
+        soundEngine.playExplosion();
+      }
+    }
+
+    return {
+      grenades: explodedGrenades,
+      rockets: explodedRockets
+    };
   }
 }

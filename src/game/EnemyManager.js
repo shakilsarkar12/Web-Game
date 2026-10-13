@@ -186,6 +186,10 @@ export class EnemyManager {
     this.enemies.push(enemy);
   }
 
+  nextWave() {
+    this.startWave(this.currentWave + 1);
+  }
+
   update(delta, playerPosition, onPlayerDamaged, onEnemyKilled, particleSystem) {
     const now = performance.now() * 0.001;
 
@@ -201,6 +205,7 @@ export class EnemyManager {
 
         if (this.currentWave >= 5 && this.enemiesRemainingToSpawn === 1) {
           typeToSpawn = 'BOSS'; // Spawn Boss on wave 5, 10, etc.
+          soundEngine.playBossRoar();
         } else if (this.currentWave >= 4 && rand < 0.2) {
           typeToSpawn = 'BRUTE';
         } else if (this.currentWave >= 3 && rand < 0.35) {
@@ -216,12 +221,9 @@ export class EnemyManager {
       // Check if all spawned and all dead
       if (this.enemiesRemainingToSpawn <= 0 && this.enemies.every(e => !e.isAlive)) {
         this.waveState = 'COMPLETED';
-        this.waveIntermissionTimer = 4.0;
-      }
-    } else if (this.waveState === 'COMPLETED') {
-      this.waveIntermissionTimer -= delta;
-      if (this.waveIntermissionTimer <= 0) {
-        this.startWave(this.currentWave + 1);
+        if (this.onWaveComplete) {
+          this.onWaveComplete(this.currentWave);
+        }
       }
     }
 
@@ -249,6 +251,34 @@ export class EnemyManager {
       e.armR.rotation.x = swing;
 
       // Enemy behavior by type
+      if (e.type === 'BOSS') {
+        // Boss Enrage at 50% HP
+        const hpRatio = e.hp / e.maxHp;
+        if (hpRatio <= 0.5 && !e.isEnraged) {
+          e.isEnraged = true;
+          e.speed = e.typeData.speed * 1.35;
+          soundEngine.playBossRoar();
+          e.mesh.traverse(c => {
+            if (c.isMesh && c.material && c.material.color) {
+              c.material.color.setHex(0xb91c1c);
+            }
+          });
+        }
+
+        // Periodic Ground Slam Shockwave Attack
+        e.lastSlamTime = e.lastSlamTime || 0;
+        if (now - e.lastSlamTime > 5.5 && dist < 12) {
+          e.lastSlamTime = now;
+          if (particleSystem) {
+            particleSystem.spawnShockwave(e.position);
+          }
+          soundEngine.playBossSlam();
+          if (dist < 6) {
+            onPlayerDamaged(30);
+          }
+        }
+      }
+
       if (e.type === 'SPITTER' && dist < 16 && dist > 7) {
         // Spitter keeps distance and shoots toxic balls
         if (now - e.lastAttackTime > e.typeData.attackCooldown) {
@@ -336,11 +366,26 @@ export class EnemyManager {
   }
 
   // Apply damage to an enemy
-  damageEnemy(enemy, amount, isHeadshot, onEnemyKilled, particleSystem) {
+  damageEnemy(enemy, amount, isHeadshot, onEnemyKilled, particleSystem, knockbackDir = null, onDamageText = null) {
     if (!enemy.isAlive) return;
 
     enemy.hp -= amount;
     soundEngine.playHitmarker(isHeadshot);
+
+    if (onDamageText) {
+      onDamageText({
+        pos: enemy.position.clone().add(new THREE.Vector3(0, 1.8, 0)),
+        amount,
+        isHeadshot
+      });
+    }
+
+    // Physical Knockback impulse
+    if (knockbackDir) {
+      const impulse = knockbackDir.clone().normalize().multiplyScalar(2.0);
+      impulse.y = 0;
+      enemy.position.add(impulse);
+    }
 
     // Flash white on hit
     enemy.mesh.traverse(child => {

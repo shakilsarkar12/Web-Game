@@ -2,7 +2,7 @@
 import React from 'react';
 import { Shield, Heart, Zap, Crosshair, Bomb, Radio, Coins, Eye, Bell } from 'lucide-react';
 
-export const HUD = ({ stats, hitmarkers, notifications, waveBanner, onOpenShop }) => {
+export const HUD = ({ stats, hitmarkers, notifications, waveBanner, comboBanner, onOpenShop }) => {
   if (!stats) return null;
 
   const {
@@ -15,6 +15,12 @@ export const HUD = ({ stats, hitmarkers, notifications, waveBanner, onOpenShop }
     reserveAmmo = 120,
     grenades = 4,
     isReloading = false,
+    isADS = false,
+    isDrivingCNG = false,
+    cngSpeed = 0,
+    canDriveCNG = false,
+    floatingTexts = [],
+    activeBoss = null,
     score = 0,
     takaCoins = 150,
     wave = 1,
@@ -28,6 +34,7 @@ export const HUD = ({ stats, hitmarkers, notifications, waveBanner, onOpenShop }
   const healthPct = Math.max(0, Math.min(100, (health / maxHealth) * 100));
   const armorPct = Math.max(0, Math.min(100, armor));
   const staminaPct = Math.max(0, Math.min(100, stamina));
+  const isSniperScopeActive = isADS && currentWeapon && currentWeapon.id === 'sniper';
 
   // Minimap radar calculations
   const radarRadius = 60;
@@ -35,6 +42,96 @@ export const HUD = ({ stats, hitmarkers, notifications, waveBanner, onOpenShop }
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-4 font-sans text-white">
+      {/* Low Health Heartbeat Pulsating Red Vignette */}
+      {health <= 30 && (
+        <div className="absolute inset-0 pointer-events-none animate-pulse border-4 border-rose-600/60 shadow-[inset_0_0_100px_rgba(225,29,72,0.65)] z-10" />
+      )}
+
+      {/* Floating Combat RPG Damage Numbers */}
+      {floatingTexts && floatingTexts.map(ft => (
+        <div
+          key={ft.id}
+          className={`absolute font-black pointer-events-none transform -translate-x-1/2 -translate-y-1/2 z-20 ${
+            ft.isCrit ? 'text-2xl font-mono' : 'text-base font-mono'
+          }`}
+          style={{
+            left: `${ft.x}px`,
+            top: `${ft.y}px`,
+            color: ft.color,
+            opacity: ft.opacity,
+            textShadow: '0 2px 8px rgba(0,0,0,0.9)'
+          }}
+        >
+          {ft.text}
+        </div>
+      ))}
+
+      {/* CNG Drive Interaction Prompt */}
+      {canDriveCNG && (
+        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 bg-emerald-950/95 border-2 border-emerald-400 px-6 py-2.5 rounded-2xl shadow-[0_0_35px_rgba(16,185,129,0.7)] flex items-center gap-3 animate-bounce z-20 pointer-events-none">
+          <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
+          <span className="text-emerald-300 font-black text-sm tracking-wider">
+            [E] সিএনজি ড্রাইভ করুন (DRIVE GREEN CNG)
+          </span>
+        </div>
+      )}
+
+      {/* CNG Driving Vehicle HUD Dashboard */}
+      {isDrivingCNG && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-emerald-500 rounded-2xl px-6 py-2.5 shadow-[0_0_30px_rgba(16,185,129,0.5)] flex items-center gap-6 z-20 pointer-events-none animate-scale-in">
+          <div className="text-center">
+            <div className="text-[10px] text-emerald-400 uppercase font-bold tracking-widest">সিএনজি ট্যাক্সি</div>
+            <div className="text-2xl font-black font-mono text-emerald-300">{cngSpeed} <span className="text-xs text-slate-400">KM/H</span></div>
+          </div>
+          <div className="h-8 w-px bg-slate-700"></div>
+          <div className="text-xs text-slate-300 font-semibold space-y-0.5">
+            <div>[WASD] ড্রাইভ ও স্পিড</div>
+            <div>[H] ঢাকাইয়া হর্ন • [E] প্রস্থান</div>
+          </div>
+        </div>
+      )}
+
+      {/* Multikill Combo Banner */}
+      {comboBanner && comboBanner.show && (
+        <div className="absolute top-28 left-1/2 -translate-x-1/2 py-3 px-8 rounded-2xl bg-gradient-to-r from-amber-600 via-rose-600 to-amber-600 text-white font-black text-xl tracking-wider border border-amber-300 shadow-[0_0_40px_rgba(245,158,11,0.8)] animate-scale-in z-30">
+          {comboBanner.title}
+        </div>
+      )}
+
+      {/* Sniper Scope Overlay */}
+      {isSniperScopeActive && (
+        <div className="absolute inset-0 z-20 pointer-events-none bg-slate-950/85 flex items-center justify-center">
+          <div className="relative w-[460px] h-[460px] rounded-full border-4 border-cyan-400/80 shadow-[0_0_120px_rgba(0,0,0,0.95)] overflow-hidden flex items-center justify-center bg-transparent">
+            {/* Crosshair lines */}
+            <div className="absolute w-full h-0.5 bg-cyan-400/80"></div>
+            <div className="absolute h-full w-0.5 bg-cyan-400/80"></div>
+            {/* Center circle */}
+            <div className="w-8 h-8 rounded-full border border-cyan-400/60 flex items-center justify-center">
+              <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)]"></div>
+            </div>
+            {/* Scope details */}
+            <span className="absolute bottom-6 font-mono text-[10px] tracking-widest text-cyan-400">PADMA-50 • TACTICAL SNIPER ZOOM</span>
+          </div>
+        </div>
+      )}
+
+      {/* Boss Health Bar on Top Center */}
+      {activeBoss && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 w-80 sm:w-96 bg-slate-900/90 border border-rose-500/80 rounded-2xl p-3 shadow-[0_0_25px_rgba(244,63,94,0.5)] z-20">
+          <div className="flex justify-between text-xs font-black text-rose-400 tracking-wider mb-1">
+            <span className="flex items-center gap-1.5 uppercase">
+              <Radio className="w-4 h-4 text-rose-500 animate-ping" /> {activeBoss.name}
+            </span>
+            <span className="font-mono text-white">{Math.round((activeBoss.hp / activeBoss.maxHp) * 100)}%</span>
+          </div>
+          <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden p-0.5 border border-rose-500/40">
+            <div
+              className="h-full bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 rounded-full transition-all duration-150"
+              style={{ width: `${Math.max(0, (activeBoss.hp / activeBoss.maxHp) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
       {/* 1. TOP HEADER: Score, Taka, Wave & Objectives */}
       <div className="flex justify-between items-start">
         {/* Top Left: Score & Currency */}
@@ -234,11 +331,13 @@ export const HUD = ({ stats, hitmarkers, notifications, waveBanner, onOpenShop }
           <div>
             <div className="flex items-baseline space-x-2">
               <div className="text-4xl font-black font-mono tracking-tighter text-white">
-                {isReloading ? (
+                {isDrivingCNG ? (
+                  <span className="text-emerald-400 text-2xl font-bold">সিএনজি মোড</span>
+                ) : isReloading ? (
                   <span className="text-amber-400 text-2xl font-bold animate-pulse">RELOADING...</span>
                 ) : (
                   <>
-                    <span className={ammo <= 5 ? 'text-rose-500 animate-pulse' : 'text-emerald-400'}>{ammo}</span>
+                    <span className={ammo <= (currentWeapon && currentWeapon.id === 'rocket' ? 0 : 5) ? 'text-rose-500 animate-pulse' : 'text-emerald-400'}>{ammo}</span>
                     <span className="text-slate-500 text-xl font-medium"> / {reserveAmmo}</span>
                   </>
                 )}
@@ -247,10 +346,10 @@ export const HUD = ({ stats, hitmarkers, notifications, waveBanner, onOpenShop }
             <div className="mt-1 flex items-center justify-between">
               <div>
                 <div className="text-sm font-bold text-slate-200">
-                  {currentWeapon ? currentWeapon.name : 'Weapon'}
+                  {isDrivingCNG ? 'গ্রিন সিএনজি ট্যাক্সি' : (currentWeapon ? currentWeapon.name : 'Weapon')}
                 </div>
                 <div className="text-[10px] text-slate-400 font-medium">
-                  {currentWeapon ? currentWeapon.subname : ''} • [R] Reload
+                  {isDrivingCNG ? '[WASD] ড্রাইভ • [H] হর্ন • [E] প্রস্থান' : `${currentWeapon ? currentWeapon.subname : ''} • [1-5] অস্ত্র • [F] কিক`}
                 </div>
               </div>
             </div>

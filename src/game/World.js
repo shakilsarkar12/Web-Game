@@ -21,8 +21,8 @@ export class World {
 
   buildLighting() {
     // Ambient and hemisphere dusk/sunset light for rich atmosphere
-    const ambientLight = new THREE.AmbientLight(0xffedd5, 0.75);
-    this.scene.add(ambientLight);
+    this.ambientLight = new THREE.AmbientLight(0xffedd5, 0.75);
+    this.scene.add(this.ambientLight);
 
     const hemiLight = new THREE.HemisphereLight(0xffd166, 0x1e293b, 0.8);
     this.scene.add(hemiLight);
@@ -35,19 +35,19 @@ export class World {
     this.scene.add(moon);
 
     // Main Golden Hour / Moon directional light
-    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.4);
-    dirLight.position.set(50, 85, 30);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 250;
+    this.dirLight = new THREE.DirectionalLight(0xffeedd, 1.4);
+    this.dirLight.position.set(50, 85, 30);
+    this.dirLight.castShadow = true;
+    this.dirLight.shadow.mapSize.width = 2048;
+    this.dirLight.shadow.mapSize.height = 2048;
+    this.dirLight.shadow.camera.near = 0.5;
+    this.dirLight.shadow.camera.far = 250;
     const d = 85;
-    dirLight.shadow.camera.left = -d;
-    dirLight.shadow.camera.right = d;
-    dirLight.shadow.camera.top = d;
-    dirLight.shadow.camera.bottom = -d;
-    this.scene.add(dirLight);
+    this.dirLight.shadow.camera.left = -d;
+    this.dirLight.shadow.camera.right = d;
+    this.dirLight.shadow.camera.top = d;
+    this.dirLight.shadow.camera.bottom = -d;
+    this.scene.add(this.dirLight);
 
     // Warm atmospheric street lights
     const streetLightPositions = [
@@ -78,6 +78,61 @@ export class World {
 
       // Add collider for pole
       this.addBoxCollider(pole.position, new THREE.Vector3(0.5, 6, 0.5));
+    });
+
+    this.buildOverheadCables();
+    this.buildPuddles();
+  }
+
+  buildOverheadCables() {
+    // Tangled Dhaka electric cables strung across poles
+    const cablePairs = [
+      [new THREE.Vector3(-25, 5.8, -20), new THREE.Vector3(25, 5.8, -20)],
+      [new THREE.Vector3(-25, 5.8, 20), new THREE.Vector3(25, 5.8, 20)],
+      [new THREE.Vector3(0, 5.8, -45), new THREE.Vector3(0, 5.8, 45)],
+      [new THREE.Vector3(-45, 5.8, 0), new THREE.Vector3(45, 5.8, 0)]
+    ];
+
+    const cableMat = new THREE.LineBasicMaterial({ color: 0x111620, linewidth: 2 });
+
+    cablePairs.forEach(([start, end]) => {
+      // 2-3 cables with slight sag
+      for (let c = 0; c < 3; c++) {
+        const mid = new THREE.Vector3().lerpVectors(start, end, 0.5);
+        mid.y -= 0.6 + c * 0.25; // Cable sag
+
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        const points = curve.getPoints(20);
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geo, cableMat);
+        this.scene.add(line);
+      }
+    });
+  }
+
+  buildPuddles() {
+    // Reflective rain puddles on Dhaka asphalt
+    const puddlePositions = [
+      { x: -3, z: 6, r: 2.2 },
+      { x: 4, z: -8, r: 2.8 },
+      { x: -5, z: -15, r: 1.9 },
+      { x: 6, z: 14, r: 2.4 }
+    ];
+
+    const puddleMat = new THREE.MeshStandardMaterial({
+      color: 0x1a2434,
+      roughness: 0.1,
+      metalness: 0.9,
+      transparent: true,
+      opacity: 0.75
+    });
+
+    puddlePositions.forEach(p => {
+      const geo = new THREE.CircleGeometry(p.r, 24);
+      const mesh = new THREE.Mesh(geo, puddleMat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(p.x, 0.035, p.z);
+      this.scene.add(mesh);
     });
   }
 
@@ -288,15 +343,164 @@ export class World {
       this.createCycleRickshaw(p.x, p.z, p.rot);
     });
 
-    // Spawn Green CNG Auto-Rickshaws
-    const cngPositions = [
-      { x: -14, z: -6, rot: 1.57 },
-      { x: 14, z: 8, rot: -1.57 }
-    ];
+    // Spawn Static Green CNG Auto-Rickshaw
+    this.createCNGRickshaw(-14, -6, 1.57);
 
-    cngPositions.forEach(p => {
-      this.createCNGRickshaw(p.x, p.z, p.rot);
+    // Spawn Interactive Driveable Green CNG Auto-Rickshaw
+    this.driveableCNG = this.createDriveableCNG(-3.5, 8.5, 1.57);
+  }
+
+  triggerLightning() {
+    if (!this.dirLight || !this.ambientLight) return;
+    const origDir = this.dirLight.intensity;
+    const origAmb = this.ambientLight.intensity;
+    this.dirLight.intensity = 5.6;
+    this.ambientLight.intensity = 2.6;
+    this.ambientLight.color.setHex(0xdbeafe);
+
+    setTimeout(() => {
+      if (this.dirLight) this.dirLight.intensity = origDir;
+      if (this.ambientLight) {
+        this.ambientLight.intensity = origAmb;
+        this.ambientLight.color.setHex(0xffedd5);
+      }
+    }, 140);
+  }
+
+  createDriveableCNG(x, z, rot) {
+    const group = new THREE.Group();
+
+    // Body (Dhaka Green with Yellow Stripe)
+    const bodyGeo = new THREE.BoxGeometry(1.8, 1.6, 2.8);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c4e34, roughness: 0.5 });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.set(0, 1.1, 0);
+    group.add(body);
+
+    // Yellow stripe
+    const stripeGeo = new THREE.BoxGeometry(1.82, 0.25, 2.82);
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xd97706 });
+    const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+    stripe.position.set(0, 1.1, 0);
+    group.add(stripe);
+
+    // Metal safety mesh wire windows
+    const windowGeo = new THREE.BoxGeometry(1.84, 0.6, 1.5);
+    const windowMat = new THREE.MeshBasicMaterial({ color: 0x0f172a, wireframe: true });
+    const win = new THREE.Mesh(windowGeo, windowMat);
+    win.position.set(0, 1.4, -0.2);
+    group.add(win);
+
+    // Windshield
+    const windshieldGeo = new THREE.PlaneGeometry(1.6, 0.7);
+    const windshieldMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.45,
+      roughness: 0.1
     });
+    const windshield = new THREE.Mesh(windshieldGeo, windshieldMat);
+    windshield.position.set(0, 1.45, 1.41);
+    group.add(windshield);
+
+    // 3 Wheels
+    const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.16, 16);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+
+    // Front steerable wheel
+    const frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
+    frontWheel.rotation.z = Math.PI / 2;
+    frontWheel.position.set(0, 0.42, 1.1);
+    group.add(frontWheel);
+
+    // Rear Left Wheel
+    const rearL = new THREE.Mesh(wheelGeo, wheelMat);
+    rearL.rotation.z = Math.PI / 2;
+    rearL.position.set(-0.85, 0.42, -0.8);
+    group.add(rearL);
+
+    // Rear Right Wheel
+    const rearR = new THREE.Mesh(wheelGeo, wheelMat);
+    rearR.rotation.z = Math.PI / 2;
+    rearR.position.set(0.85, 0.42, -0.8);
+    group.add(rearR);
+
+    // Dual Forward Spotlights / Headlights
+    const spotL = new THREE.SpotLight(0xffedd5, 3.5, 35, Math.PI / 6, 0.4);
+    spotL.position.set(-0.6, 1.0, 1.4);
+    const targetL = new THREE.Object3D();
+    targetL.position.set(-0.6, 0.5, 12);
+    group.add(spotL);
+    group.add(targetL);
+    spotL.target = targetL;
+
+    const spotR = new THREE.SpotLight(0xffedd5, 3.5, 35, Math.PI / 6, 0.4);
+    spotR.position.set(0.6, 1.0, 1.4);
+    const targetR = new THREE.Object3D();
+    targetR.position.set(0.6, 0.5, 12);
+    group.add(spotR);
+    group.add(targetR);
+    spotR.target = targetR;
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rot;
+    this.scene.add(group);
+
+    const cngObj = {
+      group,
+      frontWheel,
+      position: new THREE.Vector3(x, 0, z),
+      rotation: { y: rot },
+      speed: 0,
+      maxForwardSpeed: 24.0,
+      maxReverseSpeed: -8.0,
+      accel: 16.0,
+      steerAngle: 0,
+      isOccupied: false,
+      update: (delta, input) => {
+        const cng = cngObj;
+        // Throttle & Braking
+        if (input.moveForward) {
+          cng.speed = Math.min(cng.maxForwardSpeed, cng.speed + cng.accel * delta);
+        } else if (input.moveBackward) {
+          cng.speed = Math.max(cng.maxReverseSpeed, cng.speed - cng.accel * delta);
+        } else {
+          // Rolling friction
+          if (cng.speed > 0) {
+            cng.speed = Math.max(0, cng.speed - 10.0 * delta);
+          } else if (cng.speed < 0) {
+            cng.speed = Math.min(0, cng.speed + 10.0 * delta);
+          }
+        }
+
+        // Steering
+        const steerTarget = (input.moveLeft ? 0.45 : 0) - (input.moveRight ? 0.45 : 0);
+        cng.steerAngle = THREE.MathUtils.lerp(cng.steerAngle, steerTarget, delta * 8);
+        frontWheel.rotation.y = cng.steerAngle;
+
+        // Apply turning scaled by speed
+        if (Math.abs(cng.speed) > 0.2) {
+          const turnDir = cng.speed > 0 ? 1 : -1;
+          cng.rotation.y += cng.steerAngle * turnDir * delta * 2.4;
+        }
+
+        // Move along heading
+        const heading = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), cng.rotation.y);
+        const nextPos = cng.position.clone().addScaledVector(heading, cng.speed * delta);
+
+        // Keep inside street boundary
+        const bound = 62;
+        if (Math.abs(nextPos.x) < bound && Math.abs(nextPos.z) < bound) {
+          cng.position.copy(nextPos);
+        } else {
+          cng.speed *= -0.3; // gentle bounce
+        }
+
+        group.position.copy(cng.position);
+        group.rotation.y = cng.rotation.y;
+      }
+    };
+    return cngObj;
   }
 
   createCycleRickshaw(x, z, rot) {

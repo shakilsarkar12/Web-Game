@@ -1,5 +1,6 @@
 // Player.js - Player controller with FPS, TPS, Top-Down perspectives, stamina sprint, jump, and collision physics
 import * as THREE from 'three';
+import { soundEngine } from '../audio/SoundEngine.js';
 
 export class Player {
   constructor(camera, scene, world) {
@@ -20,13 +21,23 @@ export class Player {
     this.jumpForce = 8.5;
     this.gravity = 22.0;
 
-    // Stats
+    // Stats & Perks
     this.health = 100;
     this.maxHealth = 100;
     this.armor = 50;
     this.maxArmor = 100;
     this.stamina = 100;
     this.maxStamina = 100;
+
+    // Roguelite Perk Multipliers
+    this.moveSpeedMult = 1.0;
+    this.damageMult = 1.0;
+    this.vampireLifesteal = 0;
+    this.electricAmmo = false;
+
+    // Audio Timers
+    this.stepTimer = 0;
+    this.heartbeatTimer = 0;
 
     // Perspectives: 'FPS', 'TPS', 'TOPDOWN'
     this.perspective = 'FPS';
@@ -128,7 +139,7 @@ export class Player {
       this.stamina = Math.min(this.maxStamina, this.stamina + 20 * delta);
     }
 
-    const currentSpeed = isSprinting ? this.sprintSpeed : this.walkSpeed;
+    const currentSpeed = (isSprinting ? this.sprintSpeed : this.walkSpeed) * this.moveSpeedMult;
 
     // 2. Mouse Look & Rotation
     if (input.mouseDeltaX || input.mouseDeltaY) {
@@ -224,6 +235,25 @@ export class Player {
         if (this.legR) this.legR.rotation.x = 0;
         if (this.armL) this.armL.rotation.x = 0;
         if (this.armR) this.armR.rotation.x = 0;
+      }
+    }
+
+    // 7. Audio: Footsteps & Low HP Heartbeat
+    if (isMoving) {
+      this.stepTimer += delta;
+      if (this.stepTimer >= (isSprinting ? 0.24 : 0.38)) {
+        soundEngine.playFootstep();
+        this.stepTimer = 0;
+      }
+    } else {
+      this.stepTimer = 0;
+    }
+
+    if (this.health > 0 && this.health <= 30) {
+      this.heartbeatTimer += delta;
+      if (this.heartbeatTimer >= 0.9) {
+        soundEngine.playHeartbeat();
+        this.heartbeatTimer = 0;
       }
     }
 

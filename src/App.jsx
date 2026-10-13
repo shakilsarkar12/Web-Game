@@ -7,6 +7,7 @@ import { ShopModal } from './components/ShopModal.jsx';
 import { PauseMenu } from './components/PauseMenu.jsx';
 import { GameOverModal } from './components/GameOverModal.jsx';
 import { TouchControls } from './components/TouchControls.jsx';
+import { PerkModal } from './components/PerkModal.jsx';
 
 export default function App() {
   const containerRef = useRef(null);
@@ -17,10 +18,13 @@ export default function App() {
   const [hitmarkers, setHitmarkers] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [waveBanner, setWaveBanner] = useState({ show: false, wave: 1, message: '' });
+  const [comboBanner, setComboBanner] = useState({ show: false, count: 0, title: '' });
+  const [isLightningFlashing, setIsLightningFlashing] = useState(false);
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [gameOverData, setGameOverData] = useState(null);
   const [isRainEnabled, setIsRainEnabled] = useState(false);
+  const [perkModalState, setPerkModalState] = useState({ isOpen: false, wave: 1 });
 
   const handleStartGame = (options) => {
     setGameOverData(null);
@@ -54,11 +58,26 @@ export default function App() {
           setWaveBanner(prev => ({ ...prev, show: false }));
         }, 4000);
       },
+      showCombo: (count, title) => {
+        setComboBanner({ show: true, count, title });
+        setTimeout(() => {
+          setComboBanner(prev => ({ ...prev, show: false }));
+        }, 2200);
+      },
+      triggerScreenLightning: () => {
+        setIsLightningFlashing(true);
+        setTimeout(() => {
+          setIsLightningFlashing(false);
+        }, 140);
+      },
       onPauseChange: (paused) => {
         setIsPaused(paused);
       },
       onShopToggle: (open) => {
         setIsShopOpen(open);
+      },
+      onWaveComplete: (wave) => {
+        setPerkModalState({ isOpen: true, wave });
       },
       onGameOver: (summary) => {
         setGameOverData(summary);
@@ -119,10 +138,36 @@ export default function App() {
       engine.weaponSystem.weapons.SMG.magSize = 60;
       engine.weaponSystem.ammo.SMG.current = 60;
       uiCallbacksShowNote('বেঙ্গল ভাইপারের ম্যাগাজিন ৬০ রাউন্ড করা হয়েছে!');
+    } else if (item.id === 'rocket_ammo') {
+      engine.weaponSystem.ammo.ROCKET.reserve += 4;
+      uiCallbacksShowNote('মেঘনা-আরপিজি রকেট +৪ রাউন্ড যুক্ত হয়েছে!');
     } else if (item.id === 'airstrike') {
       engine.handleCollectDrop('POWERUP_NUKE');
       uiCallbacksShowNote('জরুরি এয়ারস্ট্রাইক চালু হয়েছে!');
     }
+  };
+
+  const handleSelectPerk = (perk) => {
+    const engine = gameEngineRef.current;
+    if (engine) {
+      if (perk.id === 'speed_boost') engine.player.moveSpeedMult *= 1.25;
+      if (perk.id === 'juggernaut') {
+        engine.player.maxHealth += 35;
+        engine.player.health = engine.player.maxHealth;
+      }
+      if (perk.id === 'rapid_fire') {
+        Object.values(engine.weaponSystem.weapons).forEach(w => {
+          w.fireRate *= 0.7;
+        });
+      }
+      if (perk.id === 'vampire') engine.player.vampireLifesteal += 4;
+      if (perk.id === 'electric') engine.player.electricAmmo = true;
+      if (perk.id === 'grenadier') engine.weaponSystem.grenades += 2;
+
+      uiCallbacksShowNote(`পারক সক্রিয়: ${perk.name}`);
+      engine.startNextWave();
+    }
+    setPerkModalState({ isOpen: false, wave: perkModalState.wave });
   };
 
   const uiCallbacksShowNote = (text) => {
@@ -146,6 +191,11 @@ export default function App() {
       {/* 3D WebGL Canvas Viewport */}
       <div ref={containerRef} className="absolute inset-0 w-full h-full cursor-crosshair" />
 
+      {/* Monsoon Lightning Screen Flash */}
+      {isLightningFlashing && (
+        <div className="absolute inset-0 bg-white/70 pointer-events-none z-40 transition-opacity duration-150 animate-pulse" />
+      )}
+
       {/* Main Menu (Start Screen) */}
       {!gameStarted && (
         <MainMenu
@@ -163,6 +213,7 @@ export default function App() {
             hitmarkers={hitmarkers}
             notifications={notifications}
             waveBanner={waveBanner}
+            comboBanner={comboBanner}
             onOpenShop={() => {
               if (gameEngineRef.current) gameEngineRef.current.toggleShop();
             }}
@@ -191,6 +242,13 @@ export default function App() {
             onRestart={handleRestart}
             isRainEnabled={isRainEnabled}
             onToggleRain={handleToggleRain}
+          />
+
+          {/* Roguelite Wave-completion Perk Modal */}
+          <PerkModal
+            isOpen={perkModalState.isOpen}
+            wave={perkModalState.wave}
+            onSelectPerk={handleSelectPerk}
           />
         </>
       )}

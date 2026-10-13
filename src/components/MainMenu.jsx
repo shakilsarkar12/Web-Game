@@ -213,6 +213,10 @@ export const MainMenu = ({ onStartGame, onToggleWeather, isRainEnabled }) => {
                 <span className="font-mono font-bold text-amber-400">G</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-800">
+                <span className="font-semibold text-slate-400">মেটাল কিক / হাতাহাতি (Quick Melee):</span>
+                <span className="font-mono font-bold text-amber-400">F</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-800">
                 <span className="font-semibold text-slate-400">ক্যামেরা ভিউ সুইচ (Perspective):</span>
                 <span className="font-mono font-bold text-amber-400">V (FPS/TPS/Top)</span>
               </div>

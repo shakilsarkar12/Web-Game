@@ -44,8 +44,16 @@ export const ShopModal = ({ isOpen, onClose, takaCoins, onBuyItem }) => {
       name: 'বেঙ্গল ভাইপার ড্রাম ম্যাগাজিন',
       desc: 'ম্যাগাজিন সাইজ বাড়িয়ে ৬০ রাউন্ড করুন',
       price: 260,
-      icon: Bomb,
+      icon: Crosshair,
       color: 'text-purple-400 bg-purple-500/10 border-purple-500/30'
+    },
+    {
+      id: 'rocket_ammo',
+      name: 'মেঘনা-আরপিজি রকেট প্যাক (+৪ রকেট)',
+      desc: '+৪টি বিস্ফোরক ওয়ারহেড রকেট যোগ করুন',
+      price: 180,
+      icon: Bomb,
+      color: 'text-orange-400 bg-orange-500/10 border-orange-500/30'
     },
     {
       id: 'airstrike',
