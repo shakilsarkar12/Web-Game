@@ -126,9 +126,9 @@ export class TextureGenerator {
     return texture;
   }
 
-  // Road with Yellow Dashed Centerlines and Zebra Crossings
+  // Road with Yellow Dashed Centerlines, Aggregate Weathering, and Pedestrian Crossings
   static createAsphaltTexture() {
-    const key = 'asphalt_main';
+    const key = 'asphalt_main_v2';
     if (this._cache.has(key)) return this._cache.get(key);
 
     const canvas = document.createElement('canvas');
@@ -136,31 +136,57 @@ export class TextureGenerator {
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
 
-    // Dark charcoal asphalt
-    ctx.fillStyle = '#1e222a';
+    // Weathered medium-dark slate asphalt (readable, clearly paved, not pitch black)
+    ctx.fillStyle = '#3d4653';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Aggregate gravel noise & roughness texture
-    for (let i = 0; i < 5000; i++) {
+    // Multi-tone aggregate gravel noise & stone aggregate texture
+    for (let i = 0; i < 6500; i++) {
       const x = Math.random() * canvas.width;
       const y = Math.random() * canvas.height;
-      const shade = Math.floor(25 + Math.random() * 25);
-      ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade + 2})`;
-      ctx.fillRect(x, y, 2, 2);
+      const shade = Math.floor(45 + Math.random() * 40);
+      const isLightSpeck = Math.random() > 0.82;
+      ctx.fillStyle = isLightSpeck
+        ? `rgb(${shade + 30}, ${shade + 32}, ${shade + 35})`
+        : `rgb(${shade}, ${shade + 2}, ${shade + 5})`;
+      const size = Math.random() > 0.7 ? 2 : 1.5;
+      ctx.fillRect(x, y, size, size);
     }
 
-    // Weathering cracks & stains
-    ctx.fillStyle = 'rgba(15, 17, 22, 0.45)';
-    ctx.fillRect(30, 0, 70, canvas.height);
-    ctx.fillRect(canvas.width - 100, 0, 70, canvas.height);
+    // Weathered tire-wear lanes and subtle street grime
+    ctx.fillStyle = 'rgba(42, 50, 60, 0.4)';
+    ctx.fillRect(40, 0, 85, canvas.height);
+    ctx.fillRect(canvas.width - 125, 0, 85, canvas.height);
 
-    // Yellow center divider line (Dashed)
-    ctx.fillStyle = '#d97706';
-    ctx.fillRect(canvas.width / 2 - 5, 30, 10, 160);
-    ctx.fillRect(canvas.width / 2 - 5, 290, 10, 160);
+    // Subtle rain-washed micro-cracks
+    ctx.strokeStyle = 'rgba(30, 36, 44, 0.35)';
+    ctx.lineWidth = 1;
+    for (let c = 0; c < 8; c++) {
+      const startX = 60 + Math.random() * (canvas.width - 120);
+      const startY = Math.random() * canvas.height;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(startX + (Math.random() - 0.5) * 24, startY + 18);
+      ctx.stroke();
+    }
 
-    // White side edge lines
-    ctx.fillStyle = 'rgba(226, 232, 240, 0.6)';
+    // Pedestrian Zebra Crossing stripes at intersection approach (top zone)
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.75)';
+    const zebraCount = 8;
+    const zebraWidth = 36;
+    const zebraGap = 20;
+    const startZebraX = (canvas.width - (zebraCount * zebraWidth + (zebraCount - 1) * zebraGap)) / 2;
+    for (let z = 0; z < zebraCount; z++) {
+      ctx.fillRect(startZebraX + z * (zebraWidth + zebraGap), 8, zebraWidth, 24);
+    }
+
+    // Yellow center divider line (Vibrant Dashed Road Marking)
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(canvas.width / 2 - 5, 50, 10, 140);
+    ctx.fillRect(canvas.width / 2 - 5, 270, 10, 160);
+
+    // Crisp white side edge guide stripes
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.85)';
     ctx.fillRect(16, 0, 4, canvas.height);
     ctx.fillRect(canvas.width - 20, 0, 4, canvas.height);
 

@@ -76,10 +76,10 @@ export class GameEngine {
   }
 
   initThree() {
-    // 1. Scene
+    // 1. Scene - "Bright Cinematic Urban Survival — Dhaka After Rain"
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x121722);
-    this.scene.fog = new THREE.FogExp2(0x121722, 0.015);
+    this.scene.background = new THREE.Color(0x8fa6b5);
+    this.scene.fog = new THREE.FogExp2(0x8fa6b5, 0.007);
 
     // 2. Camera
     this.camera = new THREE.PerspectiveCamera(
@@ -95,9 +95,9 @@ export class GameEngine {
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.05;
 
     this.container.appendChild(this.renderer.domElement);
   }

@@ -25,23 +25,25 @@ export class World {
 
 
   buildLighting() {
-    // Ambient and hemisphere dusk/sunset light for rich atmosphere
-    this.ambientLight = new THREE.AmbientLight(0xffedd5, 0.75);
+    // "Bright Cinematic Urban Survival — Dhaka After Rain"
+    // Ambient soft daylight fill (reduces black shadow crushing while preserving depth)
+    this.ambientLight = new THREE.AmbientLight(0xdce7ee, 0.85);
     this.scene.add(this.ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight(0xffd166, 0x1e293b, 0.8);
-    this.scene.add(hemiLight);
+    // Hemisphere light: soft overcast blue-gray sky, neutral weathered concrete pavement bounce
+    this.hemiLight = new THREE.HemisphereLight(0xb0c4d2, 0x4d5550, 0.75);
+    this.scene.add(this.hemiLight);
 
-    // Glowing Moon in the Dhaka night sky
-    const moonGeo = new THREE.SphereGeometry(10, 16, 16);
-    const moonMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4 });
-    const moon = new THREE.Mesh(moonGeo, moonMat);
-    moon.position.set(60, 95, -70);
-    this.scene.add(moon);
+    // Diffused sun disc in the overcast sky
+    const sunGeo = new THREE.SphereGeometry(14, 16, 16);
+    const sunMat = new THREE.MeshBasicMaterial({ color: 0xfffaed });
+    const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.position.set(60, 110, 40);
+    this.scene.add(sun);
 
-    // Main Golden Hour / Moon directional light
-    this.dirLight = new THREE.DirectionalLight(0xffeedd, 1.4);
-    this.dirLight.position.set(50, 85, 30);
+    // Main directional sunlight filtering through clouds (soft warm daylight)
+    this.dirLight = new THREE.DirectionalLight(0xfff5e6, 1.3);
+    this.dirLight.position.set(55, 85, 35);
     this.dirLight.castShadow = true;
     this.dirLight.shadow.mapSize.width = 2048;
     this.dirLight.shadow.mapSize.height = 2048;
@@ -54,7 +56,7 @@ export class World {
     this.dirLight.shadow.camera.bottom = -d;
     this.scene.add(this.dirLight);
 
-    // Warm atmospheric street lights
+    // Warm streetlights as secondary urban accents
     const streetLightPositions = [
       [-25, 6, -20], [25, 6, -20],
       [-25, 6, 20], [25, 6, 20],
@@ -63,21 +65,21 @@ export class World {
     ];
 
     streetLightPositions.forEach(([x, y, z]) => {
-      const pLight = new THREE.PointLight(0xffb547, 1.8, 28, 1.5);
+      const pLight = new THREE.PointLight(0xf59e0b, 1.25, 26, 1.5);
       pLight.position.set(x, y, z);
       this.scene.add(pLight);
       this.streetLights.push(pLight);
 
       // Light post mesh
       const poleGeo = new THREE.CylinderGeometry(0.12, 0.16, 6, 8);
-      const poleMat = new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.8 });
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.8 });
       const pole = new THREE.Mesh(poleGeo, poleMat);
       pole.position.set(x, 3, z);
       this.scene.add(pole);
 
       // Lamp head
       const lampHeadGeo = new THREE.ConeGeometry(0.6, 0.4, 8);
-      const lampHeadMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+      const lampHeadMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
       const lampHead = new THREE.Mesh(lampHeadGeo, lampHeadMat);
       lampHead.position.set(x, 5.9, z);
       this.scene.add(lampHead);
@@ -117,7 +119,7 @@ export class World {
   }
 
   buildPuddles() {
-    // Reflective rain puddles on Dhaka asphalt
+    // Reflective rain puddles on Dhaka asphalt (subtle daylight overcast sky reflection)
     const puddlePositions = [
       { x: -3, z: 6, r: 2.2 },
       { x: 4, z: -8, r: 2.8 },
@@ -126,11 +128,11 @@ export class World {
     ];
 
     const puddleMat = new THREE.MeshStandardMaterial({
-      color: 0x1a2434,
-      roughness: 0.1,
-      metalness: 0.9,
+      color: 0x6e8799,
+      roughness: 0.08,
+      metalness: 0.15,
       transparent: true,
-      opacity: 0.75
+      opacity: 0.65
     });
 
     puddlePositions.forEach(p => {
@@ -143,22 +145,23 @@ export class World {
   }
 
   buildGroundAndRoads() {
-    // Main terrain / Ground
+    // Main terrain / Ground (Natural weathered concrete & urban soil)
     const groundGeo = new THREE.PlaneGeometry(this.roadSize * 1.5, this.roadSize * 1.5);
     const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x1a202c,
-      roughness: 0.95
+      color: 0x5a6575,
+      roughness: 0.9
     });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    // Asphalt Crossroads (Dhaka Main Avenue)
+    // Asphalt Crossroads (Dhaka Main Avenue - weathered after rain)
     const asphaltTex = TextureGenerator.createAsphaltTexture();
     const roadMat = new THREE.MeshStandardMaterial({
       map: asphaltTex,
-      roughness: 0.85
+      roughness: 0.65,
+      metalness: 0.08
     });
 
     // North-South Road
@@ -177,8 +180,8 @@ export class World {
     ewRoad.receiveShadow = true;
     this.scene.add(ewRoad);
 
-    // Sidewalks / Footpaths (Raised Curbs)
-    const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x718096, roughness: 0.9 });
+    // Sidewalks / Footpaths (Clean Weathered Raised Concrete Curbs)
+    const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.85 });
     const curbPositions = [
       { x: -20, z: -20, w: 20, h: 20 },
       { x: 20, z: -20, w: 20, h: 20 },
@@ -194,9 +197,9 @@ export class World {
       this.scene.add(curb);
     });
 
-    // Center Roundabout (চত্বর / Shahbagh style circle)
+    // Center Roundabout (চত্বর / Shahbagh style circle with vibrant rain-washed foliage)
     const roundaboutGeo = new THREE.CylinderGeometry(6, 6, 0.35, 32);
-    const roundaboutMat = new THREE.MeshStandardMaterial({ color: 0x2f855a, roughness: 0.9 });
+    const roundaboutMat = new THREE.MeshStandardMaterial({ color: 0x388554, roughness: 0.85 });
     const roundabout = new THREE.Mesh(roundaboutGeo, roundaboutMat);
     roundabout.position.set(0, 0.175, 0);
     this.scene.add(roundabout);
@@ -204,7 +207,7 @@ export class World {
 
     // Monument in Roundabout with Bangladesh Flag
     const monumentBaseGeo = new THREE.BoxGeometry(2, 2.5, 2);
-    const monumentBaseMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0 });
+    const monumentBaseMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.6 });
     const monumentBase = new THREE.Mesh(monumentBaseGeo, monumentBaseMat);
     monumentBase.position.set(0, 1.4, 0);
     this.scene.add(monumentBase);
@@ -231,35 +234,35 @@ export class World {
 
   buildBuildings() {
     const buildingData = [
-      // Dhaka College Building (Historic Red Brick Architecture)
+      // Dhaka College Building (Historic Red Brick Colonial Architecture)
       {
         x: -28, z: -35, w: 22, d: 18, h: 14,
-        color: 0x9b2c2c,
+        color: 0xa8433a,
         sign: { title: 'ঢাকা কলেজ', subtitle: 'DHAKA COLLEGE', bg: '#742a2a', border: '#ecc94b', isNeon: true }
       },
-      // Commercial Plaza (Bismillah Tailors & Electronics)
+      // Commercial Plaza (Bismillah Tailors & Electronics) - Neutral Architectural Concrete Gray
       {
         x: 28, z: -35, w: 20, d: 20, h: 22,
-        color: 0x2d3748,
+        color: 0x788390,
         sign: { title: 'বিসমিল্লাহ টেইলার্স', subtitle: 'Bismillah Tailors & Fabrics', bg: '#1a365d', border: '#63b3ed', isNeon: true }
       },
-      // Dhanmondi 27 Tower
+      // Dhanmondi 27 Tower - Slate/Blue-Gray Commercial High-Rise
       {
         x: -28, z: 35, w: 20, d: 20, h: 26,
-        color: 0x1a202c,
+        color: 0x58697c,
         sign: { title: 'ধানমন্ডি ২৭', subtitle: 'Dhanmondi Commercial Center', bg: '#234e52', border: '#4fd1c5', isNeon: true }
       },
-      // Hotel Al-Kaderia Building
+      // Hotel Al-Kaderia Building - Weathered Warm Beige Concrete
       {
         x: 28, z: 35, w: 22, d: 18, h: 16,
-        color: 0x4a5568,
+        color: 0x8c7865,
         sign: { title: 'হোটেল আল-কাদেরিয়া', subtitle: 'বিরিয়ানি ও কাবাব ঘর', bg: '#7b341e', border: '#f6ad55', isNeon: true }
       },
-      // Background Outer High-rises
-      { x: -55, z: -15, w: 18, d: 24, h: 32, color: 0x2d3748 },
-      { x: 55, z: -15, w: 18, d: 24, h: 28, color: 0x1a202c },
-      { x: -55, z: 25, w: 22, d: 18, h: 24, color: 0x4a5568 },
-      { x: 55, z: 25, w: 22, d: 18, h: 35, color: 0x2d3748 }
+      // Background Outer High-rises (Varied Palette visible against soft overcast sky)
+      { x: -55, z: -15, w: 18, d: 24, h: 32, color: 0x8895a5 }, // Pale concrete tower
+      { x: 55, z: -15, w: 18, d: 24, h: 28, color: 0x75808d },  // Weathered beige-gray
+      { x: -55, z: 25, w: 22, d: 18, h: 24, color: 0x6a7d76 },  // Muted sage-concrete
+      { x: 55, z: 25, w: 22, d: 18, h: 35, color: 0x61758a }   // Classic blue-gray high-rise
     ];
 
     buildingData.forEach(b => {
@@ -313,25 +316,29 @@ export class World {
   }
 
   createBuildingWindows(building, data) {
-    const windowMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0x3e4c59,
+      roughness: 0.25,
+      metalness: 0.4
+    });
+    const litMat = new THREE.MeshBasicMaterial({ color: 0xffe4a0 });
     const rows = Math.floor(data.h / 4);
     const cols = Math.floor(data.w / 4);
 
     for (let r = 1; r < rows; r++) {
       for (let c = 1; c < cols; c++) {
-        // 50% chance a window is lit
-        if (Math.random() > 0.45) {
-          const winGeo = new THREE.PlaneGeometry(1.2, 1.5);
-          const win = new THREE.Mesh(winGeo, windowMat);
-          const offsetZ = data.z < 0 ? data.d / 2 + 0.05 : -data.d / 2 - 0.05;
-          win.position.set(
-            data.x - data.w / 2 + c * 3.5,
-            r * 3.5,
-            data.z + offsetZ
-          );
-          if (data.z > 0) win.rotation.y = Math.PI;
-          this.scene.add(win);
-        }
+        // ~28% warm interior light, rest daylight reflective glass
+        const isLit = Math.random() > 0.72;
+        const winGeo = new THREE.PlaneGeometry(1.2, 1.5);
+        const win = new THREE.Mesh(winGeo, isLit ? litMat : glassMat);
+        const offsetZ = data.z < 0 ? data.d / 2 + 0.05 : -data.d / 2 - 0.05;
+        win.position.set(
+          data.x - data.w / 2 + c * 3.5,
+          r * 3.5,
+          data.z + offsetZ
+        );
+        if (data.z > 0) win.rotation.y = Math.PI;
+        this.scene.add(win);
       }
     }
   }
@@ -360,15 +367,15 @@ export class World {
     if (!this.dirLight || !this.ambientLight) return;
     const origDir = this.dirLight.intensity;
     const origAmb = this.ambientLight.intensity;
-    this.dirLight.intensity = 5.6;
-    this.ambientLight.intensity = 2.6;
-    this.ambientLight.color.setHex(0xdbeafe);
+    this.dirLight.intensity = 4.2;
+    this.ambientLight.intensity = 2.4;
+    this.ambientLight.color.setHex(0xe0f2fe);
 
     setTimeout(() => {
       if (this.dirLight) this.dirLight.intensity = origDir;
       if (this.ambientLight) {
         this.ambientLight.intensity = origAmb;
-        this.ambientLight.color.setHex(0xffedd5);
+        this.ambientLight.color.setHex(0xdce7ee);
       }
     }, 140);
   }
@@ -682,9 +689,9 @@ export class World {
       trunk.position.set(p.x, 1.5, p.z);
       this.scene.add(trunk);
 
-      // Leaves (Low-poly foliage)
+      // Leaves (Low-poly lush foliage)
       const leavesGeo = new THREE.DodecahedronGeometry(2.2, 1);
-      const leavesMat = new THREE.MeshStandardMaterial({ color: 0x276749, roughness: 0.8 });
+      const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2e8540, roughness: 0.8 });
       const leaves = new THREE.Mesh(leavesGeo, leavesMat);
       leaves.position.set(p.x, 4.2, p.z);
       this.scene.add(leaves);
@@ -767,8 +774,8 @@ export class World {
     if (preset === 'low') {
       this.dirLight.castShadow = false;
       this.streetLights.forEach(l => {
-        l.distance = 16;
-        l.intensity = 1.1;
+        l.distance = 18;
+        l.intensity = 0.9;
       });
     } else if (preset === 'medium') {
       this.dirLight.castShadow = true;
@@ -779,7 +786,7 @@ export class World {
       }
       this.streetLights.forEach(l => {
         l.distance = 22;
-        l.intensity = 1.5;
+        l.intensity = 1.1;
       });
     } else {
       // High
@@ -790,8 +797,8 @@ export class World {
         this.dirLight.shadow.map = null;
       }
       this.streetLights.forEach(l => {
-        l.distance = 28;
-        l.intensity = 1.8;
+        l.distance = 26;
+        l.intensity = 1.25;
       });
     }
   }

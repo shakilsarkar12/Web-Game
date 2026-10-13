@@ -18,11 +18,12 @@ A high-octane, next-generation **3D Web Browser Survival Shooter** built from gr
 2. [Key Gameplay Features](#-key-gameplay-features)
 3. [Complete Codebase Architecture & File Map](#-complete-codebase-architecture--file-map)
 4. [Performance Engineering & Engine Architecture](#-performance-engineering--engine-architecture)
-5. [Graphics Quality & Device Scaling System](#-graphics-quality--device-scaling-system)
-6. [Complete Controls & Input Guide](#-complete-controls--input-guide)
-7. [Installation & Development Setup](#-installation--development-setup)
-8. [Future Roadmap & AI Development Suggestions](#-future-roadmap--ai-development-suggestions)
-9. [AI Agent Contributor Guidelines](#-ai-agent-contributor-guidelines)
+5. [Visual Direction & Lighting: Dhaka After Rain](#-visual-direction--lighting-dhaka-after-rain)
+6. [Graphics Quality & Device Scaling System](#-graphics-quality--device-scaling-system)
+7. [Complete Controls & Input Guide](#-complete-controls--input-guide)
+8. [Installation & Development Setup](#-installation--development-setup)
+9. [Future Roadmap & AI Development Suggestions](#-future-roadmap--ai-development-suggestions)
+10. [AI Agent Contributor Guidelines](#-ai-agent-contributor-guidelines)
 
 ---
 
@@ -198,6 +199,58 @@ To ensure the game runs smoothly across a broad spectrum of hardware—from low-
 ### 6. Texture Caching & Memory Deallocation
 - `TextureGenerator._cache` stores generated HTML5 Canvas textures. Subsequent props and rickshaws reuse existing texture instances.
 - Comprehensive `destroy()` lifecycle routines traverse and dispose geometries, materials, and textures when restarting matches or unmounting the React tree.
+
+---
+
+## 🌅 Visual Direction & Lighting: "Dhaka After Rain"
+
+The game adopts the art direction **"Bright Cinematic Urban Survival — Dhaka After Rain"**, shifting away from pitch-black murky night into a high-visibility, overcast daylight late afternoon after intense monsoon rain:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   SCENE LIGHTING & ATMOSPHERE MATRIX                   │
+│                                                                        │
+│   Sky: Overcast Blue-Gray (#8FA6B5)  │  Exponential Fog: 0.007 Density │
+│                                                                        │
+│   ┌─────────────────────┐   ┌──────────────────┐   ┌────────────────┐  │
+│   │ AmbientLight        │   │ HemisphereLight  │   │ DirectionalSun │  │
+│   │ 0xdce7ee (0.85)     │   │ Sky: 0xb0c4d2    │   │ 0xfff5e6 (1.3) │  │
+│   │ Soft daylight fill  │   │ Ground: 0x4d5550 │   │ Angled shadows │  │
+│   └─────────────────────┘   └──────────────────┘   └────────────────┘  │
+│                                                                        │
+│   Streetlights: Warm Amber PointLights (0xf59e0b) as secondary accents  │
+│   Tone Mapping: ACESFilmicToneMapping (Exposure: 1.05)                 │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Overcast Atmosphere & Aerial Perspective
+- **Sky Background:** Soft overcast blue-gray (`#8FA6B5`) with a diffused daylight sun disc (`0xfffaed`).
+- **Subtle Atmospheric Fog:** `THREE.FogExp2(0x8fa6b5, 0.007)` replacing heavy black fog (`0.015`). Nearby combat spaces and streets remain crisp and clear, while distant high-rises recede naturally into soft daylight mist without disappearing into an inky void.
+
+### 2. Balanced Lighting Harmony
+- **Ambient Light (`0xdce7ee`, 0.85):** Diffuse daylight fill that eliminates pitch-black crushing in alleys and building shadows, preserving depth and geometry contours.
+- **Hemisphere Light (`0xb0c4d2` sky / `0x4d5550` ground, 0.75):** Balances cool skylight from above with neutral concrete pavement bounce from below.
+- **Directional Sunlight (`0xfff5e6`, 1.3):** Filtered warm daylight casting clean, soft directional shadows across the streets.
+- **Streetlight Accents (`0xf59e0b`, 1.25):** Warm sodium lamps on street corners acting as secondary urban accents that pop against the cool overcast daylight.
+- **Tone Mapping:** `THREE.ACESFilmicToneMapping` with exposure tuned to `1.05` for high dynamic range without washed-out highlights.
+
+### 3. Paved Surfaces & Road Infrastructure
+- **Weathered Asphalt (`TextureGenerator.createAsphaltTexture`):** Slate asphalt (`#3d4653`) with 6,500 multi-tone aggregate gravel specks, subtle tire grime lanes, vibrant yellow dashed dividers (`#f59e0b`), white boundary lanes, and authentic pedestrian zebra crossings.
+- **Raised Concrete Sidewalks & Curbs (`0x94a3b8`):** Clean, weathered concrete curbs providing stark visual separation between footpaths and roads.
+- **Restrained Rain Puddles (`0x6e8799`):** Metallic sheen (`0.15`) and low roughness (`0.08`) reflecting the overcast sky in road depressions without turning the road into a blinding mirror.
+- **Shahbagh-style Roundabout Island:** Lush rain-washed tropical greenery (`0x388554`) with a bright concrete monument base (`0xf1f5f9`) flying the Bangladesh flag.
+
+### 4. Distinct Architectural Palette
+- **Dhaka College:** Colonial terracotta red-brick facade (`0xa8433a`) with authentic Bengali neon signboard.
+- **Bismillah Tailors Plaza:** Neutral commercial architectural concrete gray (`0x788390`).
+- **Dhanmondi 27 Tower:** Commercial slate/blue-gray high-rise (`0x58697c`).
+- **Hotel Al-Kaderia Building:** Weathered warm beige/biscuit concrete (`0x8c7865`).
+- **Distant High-rises:** Architectural variety of pale concrete (`0x8895a5`), weathered beige-gray (`0x75808d`), muted sage (`0x6a7d76`), and classic blue-gray (`0x61758a`).
+- **Reflective Glass Windows:** Architectural daylight glass panes (`0x3e4c59`, roughness 0.25) with ~28% warm interior lights (`0xffe4a0`).
+
+### 5. Combat & Target Readability
+- **Enemy Silhouettes:** Street Ghouls updated to a diseased decayed greenish-charcoal (`0x3a483e`), providing immediate target acquisition against light concrete roads.
+- **Muzzle Flashes & Tracers:** High-contrast ballistic tracers (`0xffd166`), blood splatters, and RPG smoke trails remain vibrant and crisp in daylight.
 
 ---
 

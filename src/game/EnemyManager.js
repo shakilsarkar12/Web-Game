@@ -12,7 +12,7 @@ export const ENEMY_TYPES = {
     attackRange: 1.8,
     attackCooldown: 1.2,
     reward: 20,
-    color: 0x4a5568,
+    color: 0x3a483e, // Decayed diseased zombie greenish-charcoal (high contrast against daylight pavement)
     scale: 1.0
   },
   RUNNER: {
