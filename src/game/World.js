@@ -7,8 +7,12 @@ export class World {
     this.scene = scene;
     this.colliders = []; // Bounding boxes for collision detection
     this.explosiveBarrels = []; // Objects that explode when shot
-    this.lights = [];
+    this.streetLights = [];
+    this.worldMeshes = [];
     this.roadSize = 160;
+
+    // Reusable collision sphere to eliminate garbage in hot loop
+    this._checkSphere = new THREE.Sphere();
 
     this.buildLighting();
     this.buildGroundAndRoads();
@@ -18,6 +22,7 @@ export class World {
     this.buildStreetProps();
     this.buildExplosiveBarrels();
   }
+
 
   buildLighting() {
     // Ambient and hemisphere dusk/sunset light for rich atmosphere
@@ -61,6 +66,7 @@ export class World {
       const pLight = new THREE.PointLight(0xffb547, 1.8, 28, 1.5);
       pLight.position.set(x, y, z);
       this.scene.add(pLight);
+      this.streetLights.push(pLight);
 
       // Light post mesh
       const poleGeo = new THREE.CylinderGeometry(0.12, 0.16, 6, 8);
@@ -506,8 +512,7 @@ export class World {
   createCycleRickshaw(x, z, rot) {
     const group = new THREE.Group();
 
-    // Rickshaw Body / Frame
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xdd6b20, roughness: 0.6 });
+    // Passenger seat
     const seatMat = new THREE.MeshStandardMaterial({ color: 0x3182ce, roughness: 0.8 });
 
     // Passenger seat
@@ -737,11 +742,13 @@ export class World {
     this.colliders.push(new THREE.Box3(min, max));
   }
 
-  // Check if a point/sphere collides with any world obstacle
+  // Check if a point/sphere collides with any world obstacle (Zero-allocation check)
   checkCollision(pos, radius = 0.5) {
-    const playerSphere = new THREE.Sphere(pos, radius);
+    this._checkSphere.center.copy(pos);
+    this._checkSphere.radius = radius;
+
     for (let i = 0; i < this.colliders.length; i++) {
-      if (this.colliders[i].intersectsSphere(playerSphere)) {
+      if (this.colliders[i].intersectsSphere(this._checkSphere)) {
         return true;
       }
     }
@@ -752,4 +759,67 @@ export class World {
     }
     return false;
   }
+
+  // Adaptive graphics quality presets (Low, Medium, High)
+  applyGraphicsQuality(preset = 'high') {
+    if (!this.dirLight) return;
+
+    if (preset === 'low') {
+      this.dirLight.castShadow = false;
+      this.streetLights.forEach(l => {
+        l.distance = 16;
+        l.intensity = 1.1;
+      });
+    } else if (preset === 'medium') {
+      this.dirLight.castShadow = true;
+      this.dirLight.shadow.mapSize.set(1024, 1024);
+      if (this.dirLight.shadow.map) {
+        this.dirLight.shadow.map.dispose();
+        this.dirLight.shadow.map = null;
+      }
+      this.streetLights.forEach(l => {
+        l.distance = 22;
+        l.intensity = 1.5;
+      });
+    } else {
+      // High
+      this.dirLight.castShadow = true;
+      this.dirLight.shadow.mapSize.set(2048, 2048);
+      if (this.dirLight.shadow.map) {
+        this.dirLight.shadow.map.dispose();
+        this.dirLight.shadow.map = null;
+      }
+      this.streetLights.forEach(l => {
+        l.distance = 28;
+        l.intensity = 1.8;
+      });
+    }
+  }
+
+  destroy() {
+    this.colliders.length = 0;
+    this.explosiveBarrels.length = 0;
+    this.streetLights.length = 0;
+
+    // Traverse scene children and safely dispose of all world meshes, geometries, and materials
+    const toRemove = [];
+    this.scene.traverse(child => {
+      if (child.isMesh) {
+        toRemove.push(child);
+      }
+    });
+
+    toRemove.forEach(mesh => {
+      this.scene.remove(mesh);
+      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.material) {
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(m => m.dispose());
+        } else {
+          mesh.material.dispose();
+        }
+      }
+    });
+  }
 }
+

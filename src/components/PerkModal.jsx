@@ -1,9 +1,9 @@
 // PerkModal.jsx - Roguelite wave-upgrade card selection
 import React from 'react';
-import { Zap, Heart, Shield, Sparkles, Flame, Crosshair } from 'lucide-react';
+import { Zap, Heart, Sparkles, Flame, Crosshair } from 'lucide-react';
 import { soundEngine } from '../audio/SoundEngine.js';
 
-export const ALL_PERKS = [
+const ALL_PERKS = [
   {
     id: 'speed_boost',
     name: 'স্পিড কোলা (Speed Cola)',
@@ -55,18 +55,24 @@ export const ALL_PERKS = [
 ];
 
 export const PerkModal = ({ isOpen, wave, onSelectPerk }) => {
-  if (!isOpen) return null;
-
-  // Pick 3 random distinct perks
+  // Unconditionally call useMemo at the top of the hook hierarchy
   const perks = React.useMemo(() => {
-    const shuffled = [...ALL_PERKS].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 3);
+    // Deterministic rotation based on wave to keep render pure and predictable
+    const offset = (wave * 2) % ALL_PERKS.length;
+    return [
+      ALL_PERKS[offset % ALL_PERKS.length],
+      ALL_PERKS[(offset + 1) % ALL_PERKS.length],
+      ALL_PERKS[(offset + 3) % ALL_PERKS.length]
+    ];
   }, [wave]);
+
+  if (!isOpen) return null;
 
   const handleSelect = (perk) => {
     soundEngine.playPerkSelect();
     onSelectPerk(perk);
   };
+
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 select-none">

@@ -1,30 +1,20 @@
 // TouchControls.jsx - Mobile & tablet virtual joysticks and touch combat buttons
-import React, { useState, useEffect } from 'react';
-import { Crosshair, Zap, Bomb, RotateCcw, ArrowUp } from 'lucide-react';
+import React, { useState } from 'react';
+import { Crosshair, Bomb, RotateCcw, ArrowUp } from 'lucide-react';
 
-export const TouchControls = ({ gameEngine }) => {
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
+export const TouchControls = ({ onAction }) => {
+  const [isTouchDevice] = useState(() => {
+    return typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  });
 
-  useEffect(() => {
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-      setIsTouchDevice(true);
-    }
-  }, []);
-
-  if (!isTouchDevice || !gameEngine) return null;
+  if (!isTouchDevice || !onAction) return null;
 
   const handleMove = (dir, active) => {
-    if (!gameEngine) return;
-    if (dir === 'forward') gameEngine.input.moveForward = active;
-    if (dir === 'backward') gameEngine.input.moveBackward = active;
-    if (dir === 'left') gameEngine.input.moveLeft = active;
-    if (dir === 'right') gameEngine.input.moveRight = active;
+    onAction('move', { dir, active });
   };
 
   const handleShoot = (active) => {
-    if (!gameEngine) return;
-    gameEngine.input.isShooting = active;
-    if (active) gameEngine.fireActiveWeapon();
+    onAction('shoot', { active });
   };
 
   return (
@@ -68,23 +58,20 @@ export const TouchControls = ({ gameEngine }) => {
         {/* Secondary buttons */}
         <div className="flex flex-col space-y-2">
           <button
-            onTouchStart={() => gameEngine.weaponSystem.reload()}
+            onTouchStart={() => onAction('reload')}
             className="w-12 h-12 bg-slate-800/80 active:bg-amber-500/80 border border-slate-600 rounded-full flex items-center justify-center text-white"
           >
             <RotateCcw className="w-5 h-5 text-amber-400" />
           </button>
           <button
-            onTouchStart={() => {
-              const dir = new THREE.Vector3(0, 0, -1);
-              gameEngine.weaponSystem.throwGrenade(gameEngine.player.position, dir, gameEngine.world);
-            }}
+            onTouchStart={() => onAction('grenade')}
             className="w-12 h-12 bg-slate-800/80 active:bg-amber-500/80 border border-slate-600 rounded-full flex items-center justify-center text-white"
           >
             <Bomb className="w-5 h-5 text-rose-400" />
           </button>
           <button
-            onTouchStart={() => { gameEngine.input.jump = true; }}
-            onTouchEnd={() => { gameEngine.input.jump = false; }}
+            onTouchStart={() => onAction('jump', { active: true })}
+            onTouchEnd={() => onAction('jump', { active: false })}
             className="w-12 h-12 bg-slate-800/80 active:bg-amber-500/80 border border-slate-600 rounded-full flex items-center justify-center text-white font-bold"
           >
             JUMP

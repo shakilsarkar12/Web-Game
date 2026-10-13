@@ -1,15 +1,75 @@
-// ParticleSystem.js - High-performance GPU-friendly particle effects
+// ParticleSystem.js - High-performance GPU-friendly particle effects with object pooling
 import * as THREE from 'three';
 
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
+
+    // Active particle collections
     this.particles = [];
     this.tracers = [];
+    this.shockwaves = [];
+
+    // Rain system
     this.rainDrops = null;
     this.isRainEnabled = false;
 
+    // Reusable math temporaries to eliminate per-frame garbage
+    this._tempVec1 = new THREE.Vector3();
+    this._tempVec2 = new THREE.Vector3();
+    this._tempEuler = new THREE.Euler();
+
+    // Shared Geometries & Materials (allocated once, never duplicated)
+    this.initSharedResources();
+
+    // Pools for zero-allocation reuse
+    this.particlePool = []; // Available reusable mesh wrappers
+    this.tracerPool = [];   // Available reusable tracer lines
+    this.shockwavePool = []; // Available reusable shockwave meshes
+
     this.initRainSystem();
+  }
+
+  initSharedResources() {
+    // 1. Geometries
+    this.geomSphereTiny = new THREE.SphereGeometry(0.045, 4, 4);
+    this.geomSphereSmall = new THREE.SphereGeometry(0.07, 4, 4);
+    this.geomSphereMed = new THREE.SphereGeometry(0.08, 5, 5);
+    this.geomSphereExplodeSmall = new THREE.SphereGeometry(0.12, 6, 6);
+    this.geomSphereExplodeLarge = new THREE.SphereGeometry(0.24, 6, 6);
+    this.geomBoxDebris = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    this.geomCasing = new THREE.CylinderGeometry(0.015, 0.015, 0.06, 6);
+    this.geomRingShockwave = new THREE.RingGeometry(0.5, 0.8, 32);
+
+    // 2. Materials
+    this.matBlood = new THREE.MeshBasicMaterial({ color: 0x9b2c2c });
+    this.matFire = new THREE.MeshBasicMaterial({ color: 0xdd6b20 });
+    this.matSpark = new THREE.MeshBasicMaterial({ color: 0xecc94b });
+    this.matAcid = new THREE.MeshBasicMaterial({ color: 0x48bb78 });
+    this.matDust = new THREE.MeshBasicMaterial({ color: 0x718096, transparent: true, opacity: 0.8 });
+    this.matImpactSpark = new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.85 });
+    this.matCasing = new THREE.MeshStandardMaterial({ color: 0xd69e2e, metalness: 0.9, roughness: 0.2 });
+    this.matSteam = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 });
+    this.matRocketSmoke = new THREE.MeshBasicMaterial({ color: 0xcbd5e1, transparent: true, opacity: 0.5 });
+    this.matShockwave = new THREE.MeshBasicMaterial({
+      color: 0xf43f5e,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85
+    });
+
+    this.matTracer = new THREE.LineBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.85 });
+    this.matLightning = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.9 });
+
+    // Cache for death particle materials by color to avoid duplicate instances
+    this.deathMatCache = new Map();
+  }
+
+  getDeathMaterial(colorHex) {
+    if (!this.deathMatCache.has(colorHex)) {
+      this.deathMatCache.set(colorHex, new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8 }));
+    }
+    return this.deathMatCache.get(colorHex);
   }
 
   initRainSystem() {
@@ -44,238 +104,287 @@ export class ParticleSystem {
     }
   }
 
-  // Bullet Tracers
-  spawnTracer(startPos, direction, length = 80) {
-    const endPos = startPos.clone().addScaledVector(direction, length);
-    const points = [startPos, endPos];
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const mat = new THREE.LineBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.85 });
-    const line = new THREE.Line(geo, mat);
+  // Acquire or create a pooled Mesh particle
+  acquireParticle(geo, mat) {
+    let pObj = null;
+    if (this.particlePool.length > 0) {
+      pObj = this.particlePool.pop();
+      pObj.mesh.geometry = geo;
+      pObj.mesh.material = mat;
+      pObj.mesh.visible = true;
+      pObj.mesh.scale.set(1, 1, 1);
+      pObj.mesh.rotation.set(0, 0, 0);
+    } else {
+      const mesh = new THREE.Mesh(geo, mat);
+      this.scene.add(mesh);
+      pObj = {
+        mesh,
+        velocity: new THREE.Vector3(),
+        life: 0,
+        maxLife: 1,
+        gravity: 9.8
+      };
+    }
+    return pObj;
+  }
 
+  recycleParticle(pObj) {
+    pObj.mesh.visible = false;
+    // Cap pool size to prevent unbounded memory retention
+    if (this.particlePool.length < 250) {
+      this.particlePool.push(pObj);
+    } else {
+      this.scene.remove(pObj.mesh);
+    }
+  }
+
+  // Bullet Tracers with reusable Line pool
+  spawnTracer(startPos, direction, length = 80) {
+    this._tempVec1.copy(startPos).addScaledVector(direction, length);
+
+    let tObj = null;
+    if (this.tracerPool.length > 0) {
+      tObj = this.tracerPool.pop();
+      const posAttr = tObj.line.geometry.attributes.position;
+      posAttr.setXYZ(0, startPos.x, startPos.y, startPos.z);
+      posAttr.setXYZ(1, this._tempVec1.x, this._tempVec1.y, this._tempVec1.z);
+      posAttr.needsUpdate = true;
+      tObj.line.material = this.matTracer;
+      tObj.line.visible = true;
+      tObj.life = 0.05;
+    } else {
+      const positions = new Float32Array([
+        startPos.x, startPos.y, startPos.z,
+        this._tempVec1.x, this._tempVec1.y, this._tempVec1.z
+      ]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const line = new THREE.Line(geo, this.matTracer);
+      this.scene.add(line);
+      tObj = { line, life: 0.05, isLightning: false };
+    }
+
+    this.tracers.push(tObj);
+  }
+
+  // Electric Chain Zap Arcs
+  spawnLightningChain(startPos, endPos) {
+    this._tempVec1.lerpVectors(startPos, endPos, 0.5);
+    this._tempVec1.x += (Math.random() - 0.5) * 0.8;
+    this._tempVec1.y += (Math.random() - 0.5) * 0.8;
+    this._tempVec1.z += (Math.random() - 0.5) * 0.8;
+
+    const positions = new Float32Array([
+      startPos.x, startPos.y, startPos.z,
+      this._tempVec1.x, this._tempVec1.y, this._tempVec1.z,
+      endPos.x, endPos.y, endPos.z
+    ]);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const line = new THREE.Line(geo, this.matLightning);
     this.scene.add(line);
-    this.tracers.push({ line, life: 0.05 });
+
+    this.tracers.push({ line, life: 0.12, isLightning: true });
   }
 
   // Blood Splatters
-  spawnBlood(position, normal) {
-    const count = 14;
+  spawnBlood(position, _normal) {
+    const count = 12;
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.SphereGeometry(0.045, 4, 4);
-      const mat = new THREE.MeshBasicMaterial({ color: 0x9b2c2c });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(position);
-
-      const velocity = new THREE.Vector3(
+      const p = this.acquireParticle(this.geomSphereTiny, this.matBlood);
+      p.mesh.position.copy(position);
+      p.velocity.set(
         (Math.random() - 0.5) * 4,
         Math.random() * 3 + 1,
         (Math.random() - 0.5) * 4
       );
-
-      this.scene.add(mesh);
-      this.particles.push({ mesh, velocity, life: 0.45, maxLife: 0.45, gravity: 9.8 });
+      p.life = 0.45;
+      p.maxLife = 0.45;
+      p.gravity = 9.8;
+      this.particles.push(p);
     }
   }
 
-  // Explosions (Grenades & Barrels)
+  // Explosions (Grenades, Barrels, RPG)
   spawnExplosion(position) {
-    // Fireball sparks
-    const count = 45;
+    const count = 36;
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.SphereGeometry(Math.random() * 0.2 + 0.1, 6, 6);
-      const isFire = Math.random() > 0.3;
-      const mat = new THREE.MeshBasicMaterial({
-        color: isFire ? 0xdd6b20 : 0xecc94b
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(position);
+      const isFire = Math.random() > 0.35;
+      const geo = Math.random() > 0.5 ? this.geomSphereExplodeSmall : this.geomSphereExplodeLarge;
+      const mat = isFire ? this.matFire : this.matSpark;
 
-      const velocity = new THREE.Vector3(
+      const p = this.acquireParticle(geo, mat);
+      p.mesh.position.copy(position);
+      p.velocity.set(
         (Math.random() - 0.5) * 16,
-        Math.random() * 14 + 2,
+        Math.random() * 13 + 2,
         (Math.random() - 0.5) * 16
       );
-
-      this.scene.add(mesh);
-      this.particles.push({ mesh, velocity, life: 0.7, maxLife: 0.7, gravity: 8.0 });
+      p.life = 0.7;
+      p.maxLife = 0.7;
+      p.gravity = 8.0;
+      this.particles.push(p);
     }
   }
 
   // Acid Splash
   spawnAcidSplash(position) {
-    const count = 12;
+    const count = 10;
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.SphereGeometry(0.08, 4, 4);
-      const mat = new THREE.MeshBasicMaterial({ color: 0x48bb78 });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(position);
-
-      const velocity = new THREE.Vector3(
+      const p = this.acquireParticle(this.geomSphereMed, this.matAcid);
+      p.mesh.position.copy(position);
+      p.velocity.set(
         (Math.random() - 0.5) * 5,
         Math.random() * 4 + 1,
         (Math.random() - 0.5) * 5
       );
-
-      this.scene.add(mesh);
-      this.particles.push({ mesh, velocity, life: 0.5, maxLife: 0.5, gravity: 9.0 });
+      p.life = 0.5;
+      p.maxLife = 0.5;
+      p.gravity = 9.0;
+      this.particles.push(p);
     }
   }
 
   // Enemy Death Disintegration
   spawnDeathParticles(position, colorHex = 0x4a5568) {
-    const count = 18;
+    const count = 16;
+    const mat = this.getDeathMaterial(colorHex);
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-      const mat = new THREE.MeshStandardMaterial({ color: colorHex });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(position);
-      mesh.position.y += Math.random() * 1.5;
-
-      const velocity = new THREE.Vector3(
+      const p = this.acquireParticle(this.geomBoxDebris, mat);
+      p.mesh.position.copy(position);
+      p.mesh.position.y += Math.random() * 1.5;
+      p.velocity.set(
         (Math.random() - 0.5) * 6,
         Math.random() * 5 + 1.5,
         (Math.random() - 0.5) * 6
       );
-
-      this.scene.add(mesh);
-      this.particles.push({ mesh, velocity, life: 0.6, maxLife: 0.6, gravity: 9.8 });
+      p.life = 0.6;
+      p.maxLife = 0.6;
+      p.gravity = 9.8;
+      this.particles.push(p);
     }
   }
 
   // Concrete / Asphalt Bullet Impact (sparks + dust puffs)
   spawnConcreteImpact(position) {
-    const count = 7;
+    const count = 6;
     for (let i = 0; i < count; i++) {
       const isSpark = i < 3;
-      const geo = new THREE.SphereGeometry(isSpark ? 0.03 : 0.07, 4, 4);
-      const mat = new THREE.MeshBasicMaterial({
-        color: isSpark ? 0xffd166 : 0x718096,
-        transparent: true,
-        opacity: 0.8
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(position);
+      const geo = isSpark ? this.geomSphereTiny : this.geomSphereSmall;
+      const mat = isSpark ? this.matImpactSpark : this.matDust;
 
-      const velocity = new THREE.Vector3(
+      const p = this.acquireParticle(geo, mat);
+      p.mesh.position.copy(position);
+      p.velocity.set(
         (Math.random() - 0.5) * 4,
         Math.random() * 3 + 1,
         (Math.random() - 0.5) * 4
       );
-
-      this.scene.add(mesh);
-      this.particles.push({ mesh, velocity, life: 0.28, maxLife: 0.28, gravity: 8.0 });
+      p.life = 0.28;
+      p.maxLife = 0.28;
+      p.gravity = 8.0;
+      this.particles.push(p);
     }
   }
 
   // Brass Bullet Shell Casing Ejection
   spawnShellCasing(position, dir) {
-    const geo = new THREE.CylinderGeometry(0.015, 0.015, 0.06, 6);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xd69e2e, metalness: 0.9, roughness: 0.2 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(position);
-    mesh.rotation.z = Math.PI / 2;
+    const p = this.acquireParticle(this.geomCasing, this.matCasing);
+    p.mesh.position.copy(position);
+    p.mesh.rotation.z = Math.PI / 2;
 
-    // Eject to the right and slightly up/back
-    const right = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(0, dir.y || 0, 0));
-    const velocity = right.multiplyScalar(2.5 + Math.random());
-    velocity.y += 2.0;
-    velocity.z -= (Math.random() - 0.5);
+    this._tempEuler.set(0, dir.y || 0, 0);
+    this._tempVec1.set(1, 0, 0).applyEuler(this._tempEuler);
 
-    this.scene.add(mesh);
-    this.particles.push({ mesh, velocity, life: 0.6, maxLife: 0.6, gravity: 12.0 });
-  }
-
-  // Electric Chain Zap Arcs
-  spawnLightningChain(startPos, endPos) {
-    const points = [startPos.clone()];
-    const mid = new THREE.Vector3().lerpVectors(startPos, endPos, 0.5);
-    mid.x += (Math.random() - 0.5) * 0.8;
-    mid.y += (Math.random() - 0.5) * 0.8;
-    mid.z += (Math.random() - 0.5) * 0.8;
-    points.push(mid);
-    points.push(endPos.clone());
-
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const mat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.9 });
-    const line = new THREE.Line(geo, mat);
-    this.scene.add(line);
-    this.tracers.push({ line, life: 0.12 });
+    const speed = 2.5 + Math.random();
+    p.velocity.set(
+      this._tempVec1.x * speed,
+      2.0,
+      this._tempVec1.z * speed - (Math.random() - 0.5)
+    );
+    p.life = 0.6;
+    p.maxLife = 0.6;
+    p.gravity = 12.0;
+    this.particles.push(p);
   }
 
   // Steaming Tea Stall & Hot Chai Puffs
   spawnSteam(position) {
-    const geo = new THREE.SphereGeometry(0.08, 6, 6);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.35
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(position);
-    mesh.position.x += (Math.random() - 0.5) * 0.3;
-    mesh.position.z += (Math.random() - 0.5) * 0.3;
+    const p = this.acquireParticle(this.geomSphereMed, this.matSteam);
+    p.mesh.position.copy(position);
+    p.mesh.position.x += (Math.random() - 0.5) * 0.3;
+    p.mesh.position.z += (Math.random() - 0.5) * 0.3;
 
-    const velocity = new THREE.Vector3(
+    p.velocity.set(
       (Math.random() - 0.5) * 0.3,
       0.8 + Math.random() * 0.5,
       (Math.random() - 0.5) * 0.3
     );
-
-    this.scene.add(mesh);
-    this.particles.push({ mesh, velocity, life: 1.2, maxLife: 1.2, gravity: -0.2 });
+    p.life = 1.2;
+    p.maxLife = 1.2;
+    p.gravity = -0.2;
+    this.particles.push(p);
   }
 
   // RPG Rocket Smoke Trail
   spawnRocketSmoke(position) {
-    const geo = new THREE.SphereGeometry(0.18, 5, 5);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xcbd5e1,
-      transparent: true,
-      opacity: 0.5
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(position);
+    const p = this.acquireParticle(this.geomSphereExplodeSmall, this.matRocketSmoke);
+    p.mesh.position.copy(position);
 
-    const velocity = new THREE.Vector3(
+    p.velocity.set(
       (Math.random() - 0.5) * 0.6,
       (Math.random() - 0.5) * 0.6,
       (Math.random() - 0.5) * 0.6
     );
-
-    this.scene.add(mesh);
-    this.particles.push({ mesh, velocity, life: 0.5, maxLife: 0.5, gravity: 0.5 });
+    p.life = 0.5;
+    p.maxLife = 0.5;
+    p.gravity = 0.5;
+    this.particles.push(p);
   }
 
   // Boss Ground Slam Shockwave Ring
   spawnShockwave(position) {
-    const geo = new THREE.RingGeometry(0.5, 0.8, 32);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xf43f5e,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.85
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(position);
-    mesh.position.y = 0.08;
-    mesh.rotation.x = Math.PI / 2;
-
-    this.scene.add(mesh);
-    this.shockwaves = this.shockwaves || [];
-    this.shockwaves.push({ mesh, radius: 0.8, maxRadius: 10.0, life: 0.8, maxLife: 0.8 });
+    let sw = null;
+    if (this.shockwavePool.length > 0) {
+      sw = this.shockwavePool.pop();
+      sw.mesh.visible = true;
+      sw.mesh.position.copy(position);
+      sw.mesh.position.y = 0.08;
+      sw.mesh.scale.set(1, 1, 1);
+      sw.life = 0.8;
+      sw.maxLife = 0.8;
+      sw.maxRadius = 10.0;
+    } else {
+      const mesh = new THREE.Mesh(this.geomRingShockwave, this.matShockwave.clone());
+      mesh.position.copy(position);
+      mesh.position.y = 0.08;
+      mesh.rotation.x = Math.PI / 2;
+      this.scene.add(mesh);
+      sw = { mesh, radius: 0.8, maxRadius: 10.0, life: 0.8, maxLife: 0.8 };
+    }
+    this.shockwaves.push(sw);
   }
 
   update(delta) {
-    // 1. Tracers decay
+    // 1. Tracers decay & recycling
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
       t.life -= delta;
       if (t.life <= 0) {
-        this.scene.remove(t.line);
+        if (!t.isLightning && this.tracerPool.length < 40) {
+          t.line.visible = false;
+          this.tracerPool.push(t);
+        } else {
+          this.scene.remove(t.line);
+          if (t.isLightning) {
+            t.line.geometry.dispose();
+          }
+        }
         this.tracers.splice(i, 1);
       }
     }
 
-    // 2. Active physics particles
+    // 2. Active physics particles update & recycling
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= delta;
@@ -285,10 +394,10 @@ export class ParticleSystem {
 
       // Scale shrink
       const progress = p.life / p.maxLife;
-      p.mesh.scale.setScalar(progress);
+      p.mesh.scale.setScalar(Math.max(0.001, progress));
 
       if (p.life <= 0 || p.mesh.position.y < 0) {
-        this.scene.remove(p.mesh);
+        this.recycleParticle(p);
         this.particles.splice(i, 1);
       }
     }
@@ -306,20 +415,92 @@ export class ParticleSystem {
     }
 
     // 4. Ground Shockwaves
-    if (this.shockwaves && this.shockwaves.length > 0) {
+    if (this.shockwaves.length > 0) {
       for (let i = this.shockwaves.length - 1; i >= 0; i--) {
         const sw = this.shockwaves[i];
         sw.life -= delta;
-        const scale = 1 + ((sw.maxLife - sw.life) / sw.maxLife) * (sw.maxRadius - 1);
+        const progress = (sw.maxLife - sw.life) / sw.maxLife;
+        const scale = 1 + progress * (sw.maxRadius - 1);
         sw.mesh.scale.set(scale, scale, 1);
         if (sw.mesh.material) {
-          sw.mesh.material.opacity = (sw.life / sw.maxLife) * 0.85;
+          sw.mesh.material.opacity = Math.max(0, (sw.life / sw.maxLife) * 0.85);
         }
         if (sw.life <= 0) {
-          this.scene.remove(sw.mesh);
+          sw.mesh.visible = false;
+          if (this.shockwavePool.length < 8) {
+            this.shockwavePool.push(sw);
+          } else {
+            this.scene.remove(sw.mesh);
+            if (sw.mesh.material) sw.mesh.material.dispose();
+          }
           this.shockwaves.splice(i, 1);
         }
       }
     }
   }
+
+  destroy() {
+    // 1. Remove & clean all active particles and pools
+    [...this.particles, ...this.particlePool].forEach(p => {
+      this.scene.remove(p.mesh);
+    });
+    this.particles.length = 0;
+    this.particlePool.length = 0;
+
+    // 2. Tracers
+    [...this.tracers, ...this.tracerPool].forEach(t => {
+      this.scene.remove(t.line);
+      t.line.geometry.dispose();
+    });
+    this.tracers.length = 0;
+    this.tracerPool.length = 0;
+
+    // 3. Shockwaves
+    [...this.shockwaves, ...this.shockwavePool].forEach(sw => {
+      this.scene.remove(sw.mesh);
+      if (sw.mesh.material) sw.mesh.material.dispose();
+    });
+    this.shockwaves.length = 0;
+    this.shockwavePool.length = 0;
+
+    // 4. Rain
+    if (this.rainDrops) {
+      this.scene.remove(this.rainDrops);
+      this.rainDrops.geometry.dispose();
+      this.rainDrops.material.dispose();
+      this.rainDrops = null;
+    }
+
+    // 5. Shared Geometries
+    [
+      this.geomSphereTiny,
+      this.geomSphereSmall,
+      this.geomSphereMed,
+      this.geomSphereExplodeSmall,
+      this.geomSphereExplodeLarge,
+      this.geomBoxDebris,
+      this.geomCasing,
+      this.geomRingShockwave
+    ].forEach(geo => geo?.dispose());
+
+    // 6. Shared Materials
+    [
+      this.matBlood,
+      this.matFire,
+      this.matSpark,
+      this.matAcid,
+      this.matDust,
+      this.matImpactSpark,
+      this.matCasing,
+      this.matSteam,
+      this.matRocketSmoke,
+      this.matShockwave,
+      this.matTracer,
+      this.matLightning
+    ].forEach(mat => mat?.dispose());
+
+    this.deathMatCache.forEach(mat => mat?.dispose());
+    this.deathMatCache.clear();
+  }
 }
+

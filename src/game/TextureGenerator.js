@@ -1,9 +1,14 @@
-// TextureGenerator.js - Generates authentic procedural canvas textures for Dhaka City
+// TextureGenerator.js - Generates authentic procedural canvas textures for Dhaka City with caching & disposal
 import * as THREE from 'three';
 
 export class TextureGenerator {
+  static _cache = new Map();
+
   // Signboard with authentic Bengali text & neon borders
   static createSignboardTexture({ title, subtitle, bgColor = '#1a202c', textColor = '#f6e05e', borderColor = '#e53e3e', isNeon = false }) {
+    const key = `sign_${title}_${subtitle}_${bgColor}_${textColor}_${borderColor}_${isNeon}`;
+    if (this._cache.has(key)) return this._cache.get(key);
+
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 256;
@@ -41,11 +46,15 @@ export class TextureGenerator {
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
+    this._cache.set(key, texture);
     return texture;
   }
 
   // Bangladesh Flag Texture
   static createBDFlagTexture() {
+    const key = 'flag_bd';
+    if (this._cache.has(key)) return this._cache.get(key);
+
     const canvas = document.createElement('canvas');
     canvas.width = 500;
     canvas.height = 300;
@@ -63,11 +72,15 @@ export class TextureGenerator {
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
+    this._cache.set(key, texture);
     return texture;
   }
 
   // Authentic Traditional Rickshaw Backplate Art Texture
   static createRickshawArtTexture() {
+    const key = 'rickshaw_art';
+    if (this._cache.has(key)) return this._cache.get(key);
+
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
@@ -109,44 +122,62 @@ export class TextureGenerator {
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
+    this._cache.set(key, texture);
     return texture;
   }
 
   // Road with Yellow Dashed Centerlines and Zebra Crossings
   static createAsphaltTexture() {
+    const key = 'asphalt_main';
+    if (this._cache.has(key)) return this._cache.get(key);
+
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
 
-    // Dark charcoal asphalt with subtle noise
-    ctx.fillStyle = '#23272e';
+    // Dark charcoal asphalt
+    ctx.fillStyle = '#1e222a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Road noise
-    for (let i = 0; i < 4000; i++) {
+    // Aggregate gravel noise & roughness texture
+    for (let i = 0; i < 5000; i++) {
       const x = Math.random() * canvas.width;
       const y = Math.random() * canvas.height;
-      const shade = Math.floor(35 + Math.random() * 20);
-      ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+      const shade = Math.floor(25 + Math.random() * 25);
+      ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade + 2})`;
       ctx.fillRect(x, y, 2, 2);
     }
 
-    // Yellow center divider line
-    ctx.fillStyle = '#ecc94b';
-    ctx.fillRect(canvas.width / 2 - 6, 40, 12, 180);
-    ctx.fillRect(canvas.width / 2 - 6, 290, 12, 180);
+    // Weathering cracks & stains
+    ctx.fillStyle = 'rgba(15, 17, 22, 0.45)';
+    ctx.fillRect(30, 0, 70, canvas.height);
+    ctx.fillRect(canvas.width - 100, 0, 70, canvas.height);
+
+    // Yellow center divider line (Dashed)
+    ctx.fillStyle = '#d97706';
+    ctx.fillRect(canvas.width / 2 - 5, 30, 10, 160);
+    ctx.fillRect(canvas.width / 2 - 5, 290, 10, 160);
+
+    // White side edge lines
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.6)';
+    ctx.fillRect(16, 0, 4, canvas.height);
+    ctx.fillRect(canvas.width - 20, 0, 4, canvas.height);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1, 4);
     texture.colorSpace = THREE.SRGBColorSpace;
+    this._cache.set(key, texture);
     return texture;
   }
 
   // Caution hazard tape (Black and Yellow diagonal stripes)
   static createHazardTexture() {
+    const key = 'hazard_tape';
+    if (this._cache.has(key)) return this._cache.get(key);
+
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
@@ -171,6 +202,7 @@ export class TextureGenerator {
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.colorSpace = THREE.SRGBColorSpace;
+    this._cache.set(key, texture);
     return texture;
   }
 
@@ -185,4 +217,11 @@ export class TextureGenerator {
       isNeon: true
     });
   }
+
+  // Dispose all cached textures cleanly on complete shutdown
+  static disposeAll() {
+    this._cache.forEach(tex => tex?.dispose());
+    this._cache.clear();
+  }
 }
+

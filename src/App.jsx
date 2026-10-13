@@ -1,5 +1,5 @@
 // App.jsx - Main Application entry wiring Three.js engine and React HUD
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GameEngine } from './game/GameEngine.js';
 import { HUD } from './components/HUD.jsx';
 import { MainMenu } from './components/MainMenu.jsx';
@@ -24,6 +24,7 @@ export default function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [gameOverData, setGameOverData] = useState(null);
   const [isRainEnabled, setIsRainEnabled] = useState(false);
+  const [graphicsQuality, setGraphicsQuality] = useState('high');
   const [perkModalState, setPerkModalState] = useState({ isOpen: false, wave: 1 });
 
   const handleStartGame = (options) => {
@@ -40,7 +41,9 @@ export default function App() {
       setStats,
       addHitmarker: (damage, isHeadshot) => {
         const id = Math.random().toString();
-        setHitmarkers(prev => [...prev, { id, damage, isHeadshot }]);
+        const offsetX = (Math.random() - 0.5) * 40;
+        const offsetY = -30 - Math.random() * 20;
+        setHitmarkers(prev => [...prev, { id, damage, isHeadshot, offsetX, offsetY }]);
         setTimeout(() => {
           setHitmarkers(prev => prev.filter(h => h.id !== id));
         }, 350);
@@ -90,6 +93,7 @@ export default function App() {
       if (options && options.perspective) {
         engine.player.setPerspective(options.perspective);
       }
+      engine.setGraphicsQuality(graphicsQuality);
       engine.particles.toggleRain(isRainEnabled);
       engine.start();
       setGameStarted(true);
@@ -112,6 +116,14 @@ export default function App() {
       gameEngineRef.current.particles.toggleRain(enable);
     }
   };
+
+  const handleSetGraphicsQuality = (preset) => {
+    setGraphicsQuality(preset);
+    if (gameEngineRef.current) {
+      gameEngineRef.current.setGraphicsQuality(preset);
+    }
+  };
+
 
   const handleBuyItem = (item) => {
     const engine = gameEngineRef.current;
@@ -186,6 +198,29 @@ export default function App() {
     };
   }, []);
 
+  const handleTouchAction = useCallback((action, payload) => {
+    const engine = gameEngineRef.current;
+    if (!engine) return;
+    if (action === 'move') {
+      if (payload.dir === 'forward') engine.input.moveForward = payload.active;
+      if (payload.dir === 'backward') engine.input.moveBackward = payload.active;
+      if (payload.dir === 'left') engine.input.moveLeft = payload.active;
+      if (payload.dir === 'right') engine.input.moveRight = payload.active;
+    } else if (action === 'shoot') {
+      engine.input.isShooting = payload.active;
+      if (payload.active) engine.fireActiveWeapon();
+    } else if (action === 'jump') {
+      engine.input.jump = payload.active;
+    } else if (action === 'reload') {
+      if (engine.weaponSystem) engine.weaponSystem.reload();
+    } else if (action === 'grenade') {
+      if (engine.weaponSystem && engine.player) {
+        engine.camera.getWorldDirection(engine._cameraDirection);
+        engine.weaponSystem.throwGrenade(engine.player.position, engine._cameraDirection, engine.world);
+      }
+    }
+  }, []);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950 select-none">
       {/* 3D WebGL Canvas Viewport */}
@@ -202,6 +237,8 @@ export default function App() {
           onStartGame={handleStartGame}
           onToggleWeather={handleToggleRain}
           isRainEnabled={isRainEnabled}
+          graphicsQuality={graphicsQuality}
+          onSetGraphicsQuality={handleSetGraphicsQuality}
         />
       )}
 
@@ -219,7 +256,7 @@ export default function App() {
             }}
           />
 
-          <TouchControls gameEngine={gameEngineRef.current} />
+          <TouchControls onAction={handleTouchAction} />
 
           {/* Shop Modal */}
           <ShopModal
@@ -242,7 +279,10 @@ export default function App() {
             onRestart={handleRestart}
             isRainEnabled={isRainEnabled}
             onToggleRain={handleToggleRain}
+            graphicsQuality={graphicsQuality}
+            onSetGraphicsQuality={handleSetGraphicsQuality}
           />
+
 
           {/* Roguelite Wave-completion Perk Modal */}
           <PerkModal

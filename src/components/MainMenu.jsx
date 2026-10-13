@@ -1,9 +1,15 @@
 // MainMenu.jsx - High-impact title screen and setup lobby
 import React, { useState } from 'react';
-import { Play, Shield, CloudRain, Volume2, VolumeX, Eye, BookOpen, Sparkles } from 'lucide-react';
+import { Play, CloudRain, Volume2, VolumeX, BookOpen, Sparkles, Monitor } from 'lucide-react';
 import { soundEngine } from '../audio/SoundEngine.js';
 
-export const MainMenu = ({ onStartGame, onToggleWeather, isRainEnabled }) => {
+export const MainMenu = ({
+  onStartGame,
+  onToggleWeather,
+  isRainEnabled,
+  graphicsQuality = 'high',
+  onSetGraphicsQuality
+}) => {
   const [selectedMap, setSelectedMap] = useState('dhaka');
   const [difficulty, setDifficulty] = useState('medium');
   const [perspective, setPerspective] = useState('FPS');
@@ -14,6 +20,7 @@ export const MainMenu = ({ onStartGame, onToggleWeather, isRainEnabled }) => {
     soundEngine.ensureContext();
     onStartGame({ selectedMap, difficulty, perspective });
   };
+
 
   const handleToggleSound = () => {
     const muted = soundEngine.toggleMute();
@@ -156,11 +163,43 @@ export const MainMenu = ({ onStartGame, onToggleWeather, isRainEnabled }) => {
           </div>
         </div>
 
+        {/* Graphics Quality Selector */}
+        <div className="mb-5 text-left">
+          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Monitor className="w-3.5 h-3.5 text-amber-400" />
+              <span>গ্রাফিক্স কোয়ালিটি (GRAPHICS QUALITY)</span>
+            </span>
+            <span className="text-[10px] text-amber-400/90 font-mono uppercase">{graphicsQuality}</span>
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { id: 'low', label: 'Low', desc: 'Max FPS' },
+              { id: 'medium', label: 'Medium', desc: 'Balanced' },
+              { id: 'high', label: 'High', desc: 'Full Quality' }
+            ].map(q => (
+              <button
+                key={q.id}
+                onClick={() => onSetGraphicsQuality && onSetGraphicsQuality(q.id)}
+                className={`py-2 px-1 rounded-xl border text-center transition cursor-pointer ${
+                  graphicsQuality === q.id
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                    : 'bg-slate-800/40 border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                }`}
+              >
+                <div className="text-xs font-bold">{q.label}</div>
+                <div className="text-[9px] text-slate-400">{q.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Big Start Button */}
         <button
           onClick={handleStart}
           className="w-full py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-lg tracking-wide rounded-2xl shadow-[0_0_30px_rgba(245,158,11,0.5)] transition duration-200 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
         >
+
           <Play className="w-6 h-6 fill-slate-950" />
           <span>যুদ্ধ শুরু করুন (PLAY GAME)</span>
         </button>

@@ -1,27 +1,33 @@
 // GameOverModal.jsx - Match summary, statistics, high-scores, and retry loop
 import React, { useEffect, useState } from 'react';
-import { Trophy, Skull, Crosshair, Coins, RotateCcw, Award } from 'lucide-react';
+import { Trophy, Skull, Crosshair, RotateCcw, Award } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export const GameOverModal = ({ data, onRestart }) => {
-  if (!data) return null;
+  const score = data ? data.score || 0 : 0;
+  const kills = data ? data.kills || 0 : 0;
+  const headshots = data ? data.headshots || 0 : 0;
+  const wave = data ? data.wave || 1 : 1;
 
-  const { score = 0, kills = 0, headshots = 0, wave = 1, takaCoins = 0 } = data;
-  const [isHighScore, setIsHighScore] = useState(false);
+  const [isHighScore] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const savedBest = parseInt(localStorage.getItem('dhaka_game_best_score') || '0', 10);
+    return (data ? data.score || 0 : 0) > savedBest && (data ? data.score || 0 : 0) > 0;
+  });
 
   useEffect(() => {
-    // Check local storage high score
-    const savedBest = parseInt(localStorage.getItem('dhaka_game_best_score') || '0', 10);
-    if (score > savedBest) {
+    if (isHighScore) {
       localStorage.setItem('dhaka_game_best_score', score.toString());
-      setIsHighScore(true);
       confetti({
         particleCount: 100,
         spread: 70,
         origin: { y: 0.6 }
       });
     }
-  }, [score]);
+  }, [isHighScore, score]);
+
+  if (!data) return null;
+
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-lg flex items-center justify-center p-4 select-none">

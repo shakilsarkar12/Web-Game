@@ -64,8 +64,6 @@ class SoundEngine {
     this.ensureContext();
     if (!this.ctx || this.isMuted) return;
 
-    const t = this.ctx.currentTime;
-
     if (weaponType === 'shotgun') {
       // Deep heavy blast
       this.createNoiseBurst(0.28, 120, 0.9);
@@ -161,7 +159,7 @@ class SoundEngine {
             this.cngGain = null;
           }
         }, 220);
-      } catch (e) {
+      } catch {
         this.cngOsc = null;
       }
     }
@@ -311,7 +309,6 @@ class SoundEngine {
     this.ensureContext();
     if (!this.ctx || this.isMuted) return;
 
-    const t = this.ctx.currentTime;
     // Mag detach click
     this.createSineSweep(500, 150, 0.08, 0.3);
     // Slide rack at 0.4s

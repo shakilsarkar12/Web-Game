@@ -607,6 +607,8 @@ export class WeaponSystem {
       if (g.fuseTime <= 0) {
         explodedGrenades.push(g.mesh.position.clone());
         this.scene.remove(g.mesh);
+        if (g.mesh.geometry) g.mesh.geometry.dispose();
+        if (g.mesh.material) g.mesh.material.dispose();
         this.activeGrenades.splice(i, 1);
         soundEngine.playExplosion();
       }
@@ -639,6 +641,12 @@ export class WeaponSystem {
       if (hit) {
         explodedRockets.push(r.position.clone());
         this.scene.remove(r.mesh);
+        r.mesh.traverse(child => {
+          if (child.isMesh) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          }
+        });
         this.activeRockets.splice(i, 1);
         soundEngine.playExplosion();
       }
@@ -649,4 +657,38 @@ export class WeaponSystem {
       rockets: explodedRockets
     };
   }
+
+  destroy() {
+    this.activeGrenades.forEach(g => {
+      this.scene.remove(g.mesh);
+      if (g.mesh.geometry) g.mesh.geometry.dispose();
+      if (g.mesh.material) g.mesh.material.dispose();
+    });
+    this.activeGrenades.length = 0;
+
+    this.activeRockets.forEach(r => {
+      this.scene.remove(r.mesh);
+      r.mesh.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) child.material.dispose();
+        }
+      });
+    });
+    this.activeRockets.length = 0;
+
+    if (this.gunGroup) {
+      this.camera.remove(this.gunGroup);
+      this.gunGroup.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
+    }
+  }
 }
+

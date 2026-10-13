@@ -21,6 +21,9 @@ export class GameEngine {
     this.kills = 0;
     this.headshots = 0;
 
+    // Animation frame tracking for leak-free cancel
+    this.animFrameId = null;
+
     // Driveable CNG Auto-Rickshaw state
     this.isDrivingCNG = false;
 
@@ -35,8 +38,24 @@ export class GameEngine {
     this.killStreak = 0;
     this.lastKillTime = 0;
 
+    // Reusable math temporaries to eliminate per-frame allocations
+    this._projVector = new THREE.Vector3();
+    this._cngCamOffset = new THREE.Vector3();
+    this._cngLookTarget = new THREE.Vector3();
+    this._shakeOffset = new THREE.Vector3();
+    this._yAxis = new THREE.Vector3(0, 1, 0);
+
+    // High-performance HUD update throttling (15Hz regular stats, instant on combat changes)
+    this.hudUpdateTimer = 0;
+    this.hudUpdateInterval = 0.066; // ~15 FPS React UI sync
+    this.hudDirty = true;
+
+    // Graphics Quality setting
+    this.graphicsQuality = 'high';
+
     // Clock
     this.clock = new THREE.Clock();
+
 
     // Input state
     this.input = {
@@ -131,6 +150,19 @@ export class GameEngine {
     this.onMouseUp = this.handleMouseUp.bind(this);
     this.onMouseMove = this.handleMouseMove.bind(this);
     this.onResize = this.handleResize.bind(this);
+    this.onContextMenu = e => e.preventDefault();
+
+    this.onRequestLock = () => {
+      if (this.isRunning && !this.isPaused && document.pointerLockElement !== this.renderer.domElement) {
+        this.renderer.domElement.requestPointerLock();
+      }
+    };
+
+    this.onWindowClick = (e) => {
+      if (this.isRunning && !this.isPaused && !e.target.closest('button, .modal, [role="dialog"]')) {
+        this.onRequestLock();
+      }
+    };
 
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -138,25 +170,35 @@ export class GameEngine {
     window.addEventListener('mouseup', this.onMouseUp);
     window.addEventListener('mousemove', this.onMouseMove);
     window.addEventListener('resize', this.onResize);
+    window.addEventListener('click', this.onWindowClick);
 
-    // Context menu disable for right click aim
-    this.renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
-
-    // Pointer Lock
-    const requestLock = () => {
-      if (this.isRunning && !this.isPaused && document.pointerLockElement !== this.renderer.domElement) {
-        this.renderer.domElement.requestPointerLock();
-      }
-    };
-    this.renderer.domElement.addEventListener('click', requestLock);
-    if (this.container) this.container.addEventListener('click', requestLock);
-    window.addEventListener('click', (e) => {
-      // If clicking outside modals/buttons, lock pointer
-      if (this.isRunning && !this.isPaused && !e.target.closest('button, .modal, [role="dialog"]')) {
-        requestLock();
-      }
-    });
+    this.renderer.domElement.addEventListener('contextmenu', this.onContextMenu);
+    this.renderer.domElement.addEventListener('click', this.onRequestLock);
+    if (this.container) this.container.addEventListener('click', this.onRequestLock);
   }
+
+  setGraphicsQuality(preset = 'high') {
+    this.graphicsQuality = preset;
+    if (!this.renderer) return;
+
+    if (preset === 'low') {
+      this.renderer.setPixelRatio(1.0);
+      this.renderer.shadowMap.enabled = false;
+    } else if (preset === 'medium') {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.BasicShadowMap;
+    } else {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
+
+    if (this.world) {
+      this.world.applyGraphicsQuality(preset);
+    }
+  }
+
 
   handleKeyDown(e) {
     if (!this.isRunning) return;
@@ -519,7 +561,7 @@ export class GameEngine {
 
   animate() {
     if (!this.isRunning) return;
-    requestAnimationFrame(this.animate.bind(this));
+    this.animFrameId = requestAnimationFrame(this.animate.bind(this));
 
     if (this.isPaused) return;
 
@@ -538,21 +580,21 @@ export class GameEngine {
       // Sync player coordinates
       this.player.position.copy(this.world.driveableCNG.position);
 
-      // Third-Person Follow Camera behind CNG
+      // Third-Person Follow Camera behind CNG (reusing vectors)
       const cngRot = this.world.driveableCNG.rotation.y;
-      const camOffset = new THREE.Vector3(0, 2.8, -6.5).applyAxisAngle(new THREE.Vector3(0, 1, 0), cngRot);
-      this.camera.position.copy(this.world.driveableCNG.position).add(camOffset);
-      const lookTarget = this.world.driveableCNG.position.clone().add(
-        new THREE.Vector3(0, 1.4, 6.0).applyAxisAngle(new THREE.Vector3(0, 1, 0), cngRot)
-      );
-      this.camera.lookAt(lookTarget);
+      this._cngCamOffset.set(0, 2.8, -6.5).applyAxisAngle(this._yAxis, cngRot);
+      this.camera.position.copy(this.world.driveableCNG.position).add(this._cngCamOffset);
+
+      this._cngLookTarget.set(0, 1.4, 6.0).applyAxisAngle(this._yAxis, cngRot).add(this.world.driveableCNG.position);
+      this.camera.lookAt(this._cngLookTarget);
 
       // Roadkill Collision with Enemies
       if (Math.abs(this.world.driveableCNG.speed) > 2.8) {
-        this.enemyManager.enemies.forEach(e => {
+        for (let i = 0; i < this.enemyManager.enemies.length; i++) {
+          const e = this.enemyManager.enemies[i];
           if (e.isAlive && e.position.distanceTo(this.world.driveableCNG.position) < 2.6) {
             const roadkillDmg = Math.round(Math.abs(this.world.driveableCNG.speed) * 14);
-            const kDir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), cngRot);
+            const kDir = new THREE.Vector3(0, 0, 1).applyAxisAngle(this._yAxis, cngRot);
             this.enemyManager.damageEnemy(
               e,
               roadkillDmg,
@@ -565,8 +607,9 @@ export class GameEngine {
             soundEngine.playCarImpact();
             this.particles.spawnBlood(e.position, kDir);
             this.uiCallbacks.showNotification('🚨 রোডকিল! সিএনজি ক্র্যাশ (+৳৫০)');
+            this.hudDirty = true;
           }
-        });
+        }
       }
     } else {
       // Normal On-Foot Movement: gun visible only in FPS
@@ -600,7 +643,8 @@ export class GameEngine {
       weaponUpdates.grenades.forEach(pos => {
         this.particles.spawnExplosion(pos);
         const radius = 10;
-        this.enemyManager.enemies.forEach(e => {
+        for (let i = 0; i < this.enemyManager.enemies.length; i++) {
+          const e = this.enemyManager.enemies[i];
           if (e.isAlive) {
             const d = e.position.distanceTo(pos);
             if (d <= radius) {
@@ -617,8 +661,9 @@ export class GameEngine {
               );
             }
           }
-        });
+        }
       });
+      this.hudDirty = true;
     }
 
     // Handle Meghna-RPG Rocket Detonations
@@ -627,7 +672,8 @@ export class GameEngine {
         this.particles.spawnExplosion(pos);
         this.weaponSystem.cameraShake = 0.55;
         const radius = 14;
-        this.enemyManager.enemies.forEach(e => {
+        for (let i = 0; i < this.enemyManager.enemies.length; i++) {
+          const e = this.enemyManager.enemies[i];
           if (e.isAlive) {
             const d = e.position.distanceTo(pos);
             if (d <= radius) {
@@ -644,8 +690,9 @@ export class GameEngine {
               );
             }
           }
-        });
+        }
       });
+      this.hudDirty = true;
     }
 
     // 3. Update Enemy AI
@@ -679,44 +726,82 @@ export class GameEngine {
       this.particles.spawnSteam(new THREE.Vector3(1.2, 2.0, 0.6));
     }
 
-    // 7. Update Floating Combat RPG Text & Screen Projections
+    // 7. Update Floating Combat RPG Text
     for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
       const ft = this.floatingTexts[i];
       ft.life -= delta;
       ft.pos.y += delta * 1.5;
       if (ft.life <= 0) {
         this.floatingTexts.splice(i, 1);
+        this.hudDirty = true;
       }
     }
 
-    const projectedTexts = this.floatingTexts.map(ft => {
-      const p = ft.pos.clone().project(this.camera);
-      const isVisible = p.z > -1 && p.z < 1;
-      const screenX = (p.x * 0.5 + 0.5) * window.innerWidth;
-      const screenY = (-(p.y * 0.5) + 0.5) * window.innerHeight;
-      return {
-        id: ft.id,
-        text: ft.text,
-        x: screenX,
-        y: screenY,
-        opacity: Math.max(0, ft.life / ft.maxLife),
-        color: ft.color,
-        isCrit: ft.isHeadshot,
-        isVisible
-      };
-    }).filter(ft => ft.isVisible);
-
-    // Apply dynamic camera recoil & explosion shake
+    // Apply zero-drift camera recoil & explosion shake
     if (this.weaponSystem.cameraShake > 0) {
-      this.camera.position.x += (Math.random() - 0.5) * this.weaponSystem.cameraShake;
-      this.camera.position.y += (Math.random() - 0.5) * this.weaponSystem.cameraShake;
+      this._shakeOffset.set(
+        (Math.random() - 0.5) * this.weaponSystem.cameraShake,
+        (Math.random() - 0.5) * this.weaponSystem.cameraShake,
+        0
+      );
+      this.camera.position.add(this._shakeOffset);
       this.weaponSystem.cameraShake = Math.max(0, this.weaponSystem.cameraShake - delta * 0.25);
     }
 
-    // 8. Update HUD state
+    // 8. Throttled React HUD state synchronization
+    this.hudUpdateTimer += delta;
+    const hasFloating = this.floatingTexts.length > 0;
+    if (this.hudDirty || this.hudUpdateTimer >= this.hudUpdateInterval || hasFloating) {
+      this.hudDirty = false;
+      this.hudUpdateTimer = 0;
+      this.dispatchHUDUpdate();
+    }
+
+    // 9. Render Three.js Scene
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  dispatchHUDUpdate() {
     const ammoState = this.weaponSystem.ammo[this.weaponSystem.currentWeaponKey];
     const distToCNG = this.world.driveableCNG ? this.player.position.distanceTo(this.world.driveableCNG.position) : 999;
     const canDriveCNG = distToCNG < 5.5 && !this.isDrivingCNG;
+
+    // Project floating texts without vector allocations
+    const projectedTexts = [];
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    for (let i = 0; i < this.floatingTexts.length; i++) {
+      const ft = this.floatingTexts[i];
+      this._projVector.copy(ft.pos).project(this.camera);
+      if (this._projVector.z > -1 && this._projVector.z < 1) {
+        projectedTexts.push({
+          id: ft.id,
+          text: ft.text,
+          x: (this._projVector.x * 0.5 + 0.5) * w,
+          y: (-(this._projVector.y * 0.5) + 0.5) * h,
+          opacity: Math.max(0, ft.life / ft.maxLife),
+          color: ft.color,
+          isCrit: ft.isHeadshot
+        });
+      }
+    }
+
+    // Gather active enemy coordinates for radar in a single loop
+    let activeBoss = null;
+    let aliveCount = 0;
+    const enemyPositions = [];
+
+    for (let i = 0; i < this.enemyManager.enemies.length; i++) {
+      const e = this.enemyManager.enemies[i];
+      if (e.isAlive) {
+        aliveCount++;
+        enemyPositions.push({ x: e.position.x, z: e.position.z });
+        if (e.type === 'BOSS') {
+          activeBoss = e;
+        }
+      }
+    }
 
     this.uiCallbacks.setStats({
       health: Math.round(this.player.health),
@@ -733,32 +818,64 @@ export class GameEngine {
       cngSpeed: this.world.driveableCNG ? Math.round(Math.abs(this.world.driveableCNG.speed) * 3.6) : 0,
       canDriveCNG,
       floatingTexts: projectedTexts,
-      activeBoss: this.enemyManager.enemies.find(e => e.isAlive && e.type === 'BOSS') || null,
+      activeBoss,
       score: this.score,
       takaCoins: this.takaCoins,
       wave: this.enemyManager.currentWave,
       perspective: this.isDrivingCNG ? 'CNG DRIVE' : this.player.perspective,
-      enemiesAlive: this.enemyManager.enemies.filter(e => e.isAlive).length,
+      enemiesAlive: aliveCount,
       enemiesRemaining: this.enemyManager.enemiesRemainingToSpawn,
       playerPos: { x: this.player.position.x, z: this.player.position.z, rotY: this.player.rotation.y },
-      enemies: this.enemyManager.enemies.filter(e => e.isAlive).map(e => ({ x: e.position.x, z: e.position.z }))
+      enemies: enemyPositions
     });
-
-    // 9. Render Three.js Scene
-    this.renderer.render(this.scene, this.camera);
   }
 
   destroy() {
     this.isRunning = false;
+
+    // 1. Cancel animation frame
+    if (this.animFrameId) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+
+    // 2. Stop audio
     soundEngine.stopMusic();
+    soundEngine.stopCNGEngine();
+
+    // 3. Remove event listeners
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('mousedown', this.onMouseDown);
     window.removeEventListener('mouseup', this.onMouseUp);
     window.removeEventListener('mousemove', this.onMouseMove);
     window.removeEventListener('resize', this.onResize);
-    if (this.renderer && this.renderer.domElement && this.renderer.domElement.parentNode) {
-      this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+    window.removeEventListener('click', this.onWindowClick);
+
+    if (this.renderer && this.renderer.domElement) {
+      this.renderer.domElement.removeEventListener('contextmenu', this.onContextMenu);
+      this.renderer.domElement.removeEventListener('click', this.onRequestLock);
+    }
+    if (this.container && this.onRequestLock) {
+      this.container.removeEventListener('click', this.onRequestLock);
+    }
+
+    // 4. Destroy subsystems
+    if (this.particles) this.particles.destroy();
+    if (this.enemyManager) this.enemyManager.destroy();
+    if (this.drops) this.drops.destroy();
+    if (this.player) this.player.destroy();
+    if (this.weaponSystem) this.weaponSystem.destroy();
+    if (this.world) this.world.destroy();
+
+    // 5. Dispose WebGLRenderer
+    if (this.renderer) {
+      this.renderer.dispose();
+      if (this.renderer.domElement && this.renderer.domElement.parentNode) {
+        this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+      }
+      this.renderer = null;
     }
   }
 }
+

@@ -1,4 +1,4 @@
-// EnemyManager.js - Wave director, 5 enemy classes, procedural walking animations, and combat AI
+// EnemyManager.js - Wave director, 5 enemy classes, spatial grid optimization, procedural animations, and combat AI
 import * as THREE from 'three';
 import { soundEngine } from '../audio/SoundEngine.js';
 
@@ -90,6 +90,25 @@ export class EnemyManager {
       new THREE.Vector3(-45, 0, 45),
       new THREE.Vector3(45, 0, 45)
     ];
+
+    // Reusable math temporaries (zero allocations in hot loop)
+    this._toPlayer = new THREE.Vector3();
+    this._moveStep = new THREE.Vector3();
+    this._lookTarget = new THREE.Vector3();
+    this._pushVec = new THREE.Vector3();
+    this._tempPos = new THREE.Vector3();
+
+    // Lightweight spatial hash / grid for fast enemy separation
+    this.cellSize = 4.0;
+    this.spatialGrid = new Map();
+
+    // Shared resources for toxic slime projectiles
+    this.slimeGeo = new THREE.SphereGeometry(0.25, 8, 8);
+    this.slimeMat = new THREE.MeshBasicMaterial({ color: 0x48bb78 });
+    this.slimePool = [];
+
+    // Active death timeout tracker for leak-free cancellations
+    this.deathTimers = new Set();
   }
 
   startWave(waveNumber) {
@@ -107,11 +126,8 @@ export class EnemyManager {
     const spawnPt = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
 
     // Randomize slightly around spawn point
-    const pos = new THREE.Vector3(
-      spawnPt.x + (Math.random() - 0.5) * 8,
-      0,
-      spawnPt.z + (Math.random() - 0.5) * 8
-    );
+    const spawnX = spawnPt.x + (Math.random() - 0.5) * 8;
+    const spawnZ = spawnPt.z + (Math.random() - 0.5) * 8;
 
     // 3D Enemy Mesh Group
     const group = new THREE.Group();
@@ -161,7 +177,7 @@ export class EnemyManager {
     legR.position.set(0.22 * s, 0.45 * s, 0);
     group.add(legR);
 
-    group.position.copy(pos);
+    group.position.set(spawnX, 0, spawnZ);
     this.scene.add(group);
 
     const enemy = {
@@ -188,6 +204,26 @@ export class EnemyManager {
 
   nextWave() {
     this.startWave(this.currentWave + 1);
+  }
+
+  // Populate spatial hash grid for active enemies
+  buildSpatialGrid() {
+    this.spatialGrid.clear();
+    for (let i = 0; i < this.enemies.length; i++) {
+      const e = this.enemies[i];
+      if (!e.isAlive) continue;
+
+      const cx = Math.floor(e.position.x / this.cellSize);
+      const cz = Math.floor(e.position.z / this.cellSize);
+      const key = `${cx},${cz}`;
+
+      let cell = this.spatialGrid.get(key);
+      if (!cell) {
+        cell = [];
+        this.spatialGrid.set(key, cell);
+      }
+      cell.push(e);
+    }
   }
 
   update(delta, playerPosition, onPlayerDamaged, onEnemyKilled, particleSystem) {
@@ -219,7 +255,15 @@ export class EnemyManager {
       }
 
       // Check if all spawned and all dead
-      if (this.enemiesRemainingToSpawn <= 0 && this.enemies.every(e => !e.isAlive)) {
+      let hasAlive = false;
+      for (let i = 0; i < this.enemies.length; i++) {
+        if (this.enemies[i].isAlive) {
+          hasAlive = true;
+          break;
+        }
+      }
+
+      if (this.enemiesRemainingToSpawn <= 0 && !hasAlive) {
         this.waveState = 'COMPLETED';
         if (this.onWaveComplete) {
           this.onWaveComplete(this.currentWave);
@@ -227,7 +271,10 @@ export class EnemyManager {
       }
     }
 
-    // 2. Enemy AI, Movement & Combat
+    // 2. Build Spatial Grid for O(1) local neighbor lookups
+    this.buildSpatialGrid();
+
+    // 3. Enemy AI, Movement & Combat
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i];
       if (!e.isAlive) continue;
@@ -235,13 +282,14 @@ export class EnemyManager {
       e.animTime += delta * e.speed * 2.5;
 
       // Direction vector to player
-      const toPlayer = new THREE.Vector3().subVectors(playerPosition, e.position);
-      const dist = toPlayer.length();
-      toPlayer.y = 0;
-      toPlayer.normalize();
+      this._toPlayer.subVectors(playerPosition, e.position);
+      const dist = this._toPlayer.length();
+      this._toPlayer.y = 0;
+      if (dist > 0.001) this._toPlayer.normalize();
 
       // Look at player
-      e.mesh.lookAt(new THREE.Vector3(playerPosition.x, e.position.y, playerPosition.z));
+      this._lookTarget.set(playerPosition.x, e.position.y, playerPosition.z);
+      e.mesh.lookAt(this._lookTarget);
 
       // Procedural walking animation
       const swing = Math.sin(e.animTime) * 0.6;
@@ -288,22 +336,36 @@ export class EnemyManager {
       } else {
         // Chase player
         if (dist > e.typeData.attackRange) {
-          const moveStep = toPlayer.clone().multiplyScalar(e.speed * delta);
-          const nextPos = e.position.clone().add(moveStep);
+          this._moveStep.copy(this._toPlayer).multiplyScalar(e.speed * delta);
+          e.position.add(this._moveStep);
 
-          // Separation check from other enemies
-          for (let j = 0; j < this.enemies.length; j++) {
-            if (i !== j && this.enemies[j].isAlive) {
-              const other = this.enemies[j];
-              const d = e.position.distanceTo(other.position);
-              if (d < 1.2) {
-                const push = new THREE.Vector3().subVectors(e.position, other.position).normalize().multiplyScalar(0.04);
-                nextPos.add(push);
+          // Fast spatial grid neighbor separation check (only checks 3x3 adjacent cells)
+          const cx = Math.floor(e.position.x / this.cellSize);
+          const cz = Math.floor(e.position.z / this.cellSize);
+
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oz = -1; oz <= 1; oz++) {
+              const cellKey = `${cx + ox},${cz + oz}`;
+              const neighbors = this.spatialGrid.get(cellKey);
+              if (!neighbors) continue;
+
+              for (let n = 0; n < neighbors.length; n++) {
+                const other = neighbors[n];
+                if (other === e || !other.isAlive) continue;
+
+                const dx = e.position.x - other.position.x;
+                const dz = e.position.z - other.position.z;
+                const dSq = dx * dx + dz * dz;
+
+                if (dSq < 1.44 && dSq > 0.0001) { // 1.2m radius
+                  const d = Math.sqrt(dSq);
+                  const pushStrength = (1.2 - d) * 0.06;
+                  e.position.x += (dx / d) * pushStrength;
+                  e.position.z += (dz / d) * pushStrength;
+                }
               }
             }
           }
-
-          e.position.copy(nextPos);
         } else {
           // In attack range - Melee Attack
           if (now - e.lastAttackTime > e.typeData.attackCooldown) {
@@ -319,7 +381,7 @@ export class EnemyManager {
       }
     }
 
-    // 3. Update Toxic Slime Projectiles
+    // 4. Update Toxic Slime Projectiles
     for (let pIdx = this.enemyProjectiles.length - 1; pIdx >= 0; pIdx--) {
       const proj = this.enemyProjectiles[pIdx];
       proj.mesh.position.addScaledVector(proj.velocity, delta);
@@ -330,7 +392,7 @@ export class EnemyManager {
       if (distToPlayer < 1.4) {
         onPlayerDamaged(proj.damage);
         soundEngine.playPlayerHurt();
-        this.scene.remove(proj.mesh);
+        this.recycleToxicSlime(proj);
         this.enemyProjectiles.splice(pIdx, 1);
         continue;
       }
@@ -340,29 +402,45 @@ export class EnemyManager {
         if (particleSystem) {
           particleSystem.spawnAcidSplash(proj.mesh.position);
         }
-        this.scene.remove(proj.mesh);
+        this.recycleToxicSlime(proj);
         this.enemyProjectiles.splice(pIdx, 1);
       }
     }
   }
 
   shootToxicSlime(fromPos, toPlayerPos) {
-    const geo = new THREE.SphereGeometry(0.25, 8, 8);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x48bb78 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(fromPos);
-    mesh.position.y += 1.6;
-    this.scene.add(mesh);
+    let proj = null;
+    if (this.slimePool.length > 0) {
+      proj = this.slimePool.pop();
+      proj.mesh.visible = true;
+      proj.mesh.position.copy(fromPos);
+      proj.mesh.position.y += 1.6;
+      proj.life = 3.5;
+    } else {
+      const mesh = new THREE.Mesh(this.slimeGeo, this.slimeMat);
+      mesh.position.copy(fromPos);
+      mesh.position.y += 1.6;
+      this.scene.add(mesh);
+      proj = {
+        mesh,
+        velocity: new THREE.Vector3(),
+        damage: 20,
+        life: 3.5
+      };
+    }
 
-    const dir = new THREE.Vector3().subVectors(toPlayerPos, mesh.position).normalize();
-    const velocity = dir.multiplyScalar(18);
+    this._toPlayer.subVectors(toPlayerPos, proj.mesh.position).normalize();
+    proj.velocity.copy(this._toPlayer).multiplyScalar(18);
+    this.enemyProjectiles.push(proj);
+  }
 
-    this.enemyProjectiles.push({
-      mesh,
-      velocity,
-      damage: 20,
-      life: 3.5
-    });
+  recycleToxicSlime(proj) {
+    proj.mesh.visible = false;
+    if (this.slimePool.length < 15) {
+      this.slimePool.push(proj);
+    } else {
+      this.scene.remove(proj.mesh);
+    }
   }
 
   // Apply damage to an enemy
@@ -373,8 +451,10 @@ export class EnemyManager {
     soundEngine.playHitmarker(isHeadshot);
 
     if (onDamageText) {
+      this._tempPos.copy(enemy.position);
+      this._tempPos.y += 1.8;
       onDamageText({
-        pos: enemy.position.clone().add(new THREE.Vector3(0, 1.8, 0)),
+        pos: this._tempPos.clone(),
         amount,
         isHeadshot
       });
@@ -382,9 +462,9 @@ export class EnemyManager {
 
     // Physical Knockback impulse
     if (knockbackDir) {
-      const impulse = knockbackDir.clone().normalize().multiplyScalar(2.0);
-      impulse.y = 0;
-      enemy.position.add(impulse);
+      this._pushVec.copy(knockbackDir).normalize().multiplyScalar(2.0);
+      this._pushVec.y = 0;
+      enemy.position.add(this._pushVec);
     }
 
     // Flash white on hit
@@ -412,16 +492,41 @@ export class EnemyManager {
       particleSystem.spawnDeathParticles(enemy.position, enemy.typeData.color);
     }
 
-    // Death tilt animation and removal
+    // Death tilt animation
     enemy.mesh.rotation.x = Math.PI / 2;
     enemy.position.y = 0.2;
 
-    setTimeout(() => {
-      this.scene.remove(enemy.mesh);
+    const timerId = setTimeout(() => {
+      this.deathTimers.delete(timerId);
+      this.disposeEnemy(enemy);
+      const idx = this.enemies.indexOf(enemy);
+      if (idx !== -1) {
+        this.enemies.splice(idx, 1);
+      }
     }, 1200);
+
+    this.deathTimers.add(timerId);
 
     // Trigger reward & drop
     onEnemyKilled(enemy, isHeadshot);
+  }
+
+  disposeEnemy(enemy) {
+    if (!enemy || !enemy.mesh) return;
+    this.scene.remove(enemy.mesh);
+    enemy.mesh.traverse(child => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      }
+    });
+    enemy.mesh = null;
   }
 
   // Explode explosive barrel in area
@@ -436,10 +541,16 @@ export class EnemyManager {
 
     // Damage enemies in 12m radius
     const explosionRadius = 12;
-    for (let e of this.enemies) {
+    const explosionRadiusSq = explosionRadius * explosionRadius;
+
+    for (let i = 0; i < this.enemies.length; i++) {
+      const e = this.enemies[i];
       if (e.isAlive) {
-        const d = e.position.distanceTo(barrel.position);
-        if (d <= explosionRadius) {
+        const dx = e.position.x - barrel.position.x;
+        const dz = e.position.z - barrel.position.z;
+        const dSq = dx * dx + dz * dz;
+        if (dSq <= explosionRadiusSq) {
+          const d = Math.sqrt(dSq);
           const falloff = 1 - d / explosionRadius;
           const dmg = Math.round(300 * falloff);
           this.damageEnemy(e, dmg, false, onEnemyKilled, particleSystem);
@@ -449,5 +560,31 @@ export class EnemyManager {
 
     // Remove barrel mesh
     this.scene.remove(barrel.mesh);
+  }
+
+  destroy() {
+    // Clear all pending death timeouts
+    this.deathTimers.forEach(id => clearTimeout(id));
+    this.deathTimers.clear();
+
+    // Clean up all enemies and their meshes/geometries/materials
+    this.enemies.forEach(e => this.disposeEnemy(e));
+    this.enemies.length = 0;
+
+    // Clean up projectiles and pool
+    this.enemyProjectiles.forEach(p => {
+      this.scene.remove(p.mesh);
+    });
+    this.enemyProjectiles.length = 0;
+
+    this.slimePool.forEach(p => {
+      this.scene.remove(p.mesh);
+    });
+    this.slimePool.length = 0;
+
+    if (this.slimeGeo) this.slimeGeo.dispose();
+    if (this.slimeMat) this.slimeMat.dispose();
+
+    this.spatialGrid.clear();
   }
 }

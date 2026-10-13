@@ -1,6 +1,6 @@
 // HUD.jsx - Futuristic Cyberpunk Dhaka In-Game HUD & Radar Minimap
 import React from 'react';
-import { Shield, Heart, Zap, Crosshair, Bomb, Radio, Coins, Eye, Bell } from 'lucide-react';
+import { Shield, Heart, Zap, Bomb, Radio, Coins, Eye } from 'lucide-react';
 
 export const HUD = ({ stats, hitmarkers, notifications, waveBanner, comboBanner, onOpenShop }) => {
   if (!stats) return null;
@@ -234,12 +234,13 @@ export const HUD = ({ stats, hitmarkers, notifications, waveBanner, comboBanner,
               hm.isHeadshot ? 'text-amber-400 text-2xl shadow-red-500' : 'text-rose-400'
             }`}
             style={{
-              transform: `translate(${(Math.random() - 0.5) * 40}px, ${-30 - Math.random() * 20}px)`
+              transform: `translate(${hm.offsetX ?? 0}px, ${hm.offsetY ?? -30}px)`
             }}
           >
             {hm.isHeadshot ? `HEADSHOT! -${hm.damage}` : `-${hm.damage}`}
           </div>
         ))}
+
 
         {/* Wave Banner */}
         {waveBanner && waveBanner.show && (

@@ -13,6 +13,20 @@ export class DropManager {
   constructor(scene) {
     this.scene = scene;
     this.drops = [];
+
+    // Shared geometries
+    this.geoCoin = new THREE.CylinderGeometry(0.35, 0.35, 0.08, 16);
+    this.geoHealthBox = new THREE.BoxGeometry(0.5, 0.4, 0.3);
+    this.geoHealthCross = new THREE.BoxGeometry(0.3, 0.1, 0.32);
+    this.geoAmmoBox = new THREE.BoxGeometry(0.45, 0.35, 0.6);
+    this.geoNukeOrb = new THREE.DodecahedronGeometry(0.4);
+
+    // Shared materials
+    this.matCoin = new THREE.MeshStandardMaterial({ color: 0xecc94b, metalness: 0.9, roughness: 0.2 });
+    this.matHealthBox = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    this.matHealthCross = new THREE.MeshBasicMaterial({ color: 0xe53e3e });
+    this.matAmmoBox = new THREE.MeshStandardMaterial({ color: 0x276749, roughness: 0.5 });
+    this.matNukeOrb = new THREE.MeshBasicMaterial({ color: 0xe53e3e, wireframe: true });
   }
 
   spawnDrop(position, forcedType = null) {
@@ -29,34 +43,19 @@ export class DropManager {
     const group = new THREE.Group();
 
     if (typeKey === 'COIN') {
-      // Golden coin
-      const geo = new THREE.CylinderGeometry(0.35, 0.35, 0.08, 16);
-      const mat = new THREE.MeshStandardMaterial({ color: 0xecc94b, metalness: 0.9, roughness: 0.2 });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(this.geoCoin, this.matCoin);
       mesh.rotation.x = Math.PI / 2;
       group.add(mesh);
     } else if (typeKey === 'HEALTH') {
-      // White health box with cross
-      const geo = new THREE.BoxGeometry(0.5, 0.4, 0.3);
-      const mat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-      const box = new THREE.Mesh(geo, mat);
+      const box = new THREE.Mesh(this.geoHealthBox, this.matHealthBox);
       group.add(box);
-
-      const crossGeo = new THREE.BoxGeometry(0.3, 0.1, 0.32);
-      const crossMat = new THREE.MeshBasicMaterial({ color: 0xe53e3e });
-      const cross = new THREE.Mesh(crossGeo, crossMat);
+      const cross = new THREE.Mesh(this.geoHealthCross, this.matHealthCross);
       group.add(cross);
     } else if (typeKey === 'AMMO') {
-      // Military green ammo tin
-      const geo = new THREE.BoxGeometry(0.45, 0.35, 0.6);
-      const mat = new THREE.MeshStandardMaterial({ color: 0x276749, roughness: 0.5 });
-      const box = new THREE.Mesh(geo, mat);
+      const box = new THREE.Mesh(this.geoAmmoBox, this.matAmmoBox);
       group.add(box);
     } else {
-      // Nuke powerup (Red skull orb)
-      const geo = new THREE.DodecahedronGeometry(0.4);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xe53e3e, wireframe: true });
-      const orb = new THREE.Mesh(geo, mat);
+      const orb = new THREE.Mesh(this.geoNukeOrb, this.matNukeOrb);
       group.add(orb);
     }
 
@@ -101,4 +100,28 @@ export class DropManager {
       }
     }
   }
+
+  destroy() {
+    this.drops.forEach(drop => {
+      this.scene.remove(drop.group);
+    });
+    this.drops.length = 0;
+
+    [
+      this.geoCoin,
+      this.geoHealthBox,
+      this.geoHealthCross,
+      this.geoAmmoBox,
+      this.geoNukeOrb
+    ].forEach(geo => geo?.dispose());
+
+    [
+      this.matCoin,
+      this.matHealthBox,
+      this.matHealthCross,
+      this.matAmmoBox,
+      this.matNukeOrb
+    ].forEach(mat => mat?.dispose());
+  }
 }
+

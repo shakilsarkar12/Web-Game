@@ -42,11 +42,19 @@ export class Player {
     // Perspectives: 'FPS', 'TPS', 'TOPDOWN'
     this.perspective = 'FPS';
 
+    // Reusable math temporaries to eliminate per-frame allocations
+    this._moveVector = new THREE.Vector3();
+    this._nextPos = new THREE.Vector3();
+    this._tpsOffset = new THREE.Vector3();
+    this._tpsEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._yAxis = new THREE.Vector3(0, 1, 0);
+
     // 3D Player Character Model (rendered in TPS & TopDown)
     this.characterMesh = this.buildPlayerMesh();
     this.scene.add(this.characterMesh);
     this.characterMesh.visible = false; // Hidden in FPS
   }
+
 
   buildPlayerMesh() {
     const group = new THREE.Group();
@@ -150,31 +158,31 @@ export class Player {
     }
 
     // 3. Horizontal Movement Calculation
-    const moveVector = new THREE.Vector3();
-    if (input.moveForward) moveVector.z -= 1;
-    if (input.moveBackward) moveVector.z += 1;
-    if (input.moveLeft) moveVector.x -= 1;
-    if (input.moveRight) moveVector.x += 1;
+    this._moveVector.set(0, 0, 0);
+    if (input.moveForward) this._moveVector.z -= 1;
+    if (input.moveBackward) this._moveVector.z += 1;
+    if (input.moveLeft) this._moveVector.x -= 1;
+    if (input.moveRight) this._moveVector.x += 1;
 
-    if (moveVector.lengthSq() > 0) {
-      moveVector.normalize();
+    if (this._moveVector.lengthSq() > 0) {
+      this._moveVector.normalize();
       // Rotate by player's yaw
-      moveVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
-      moveVector.multiplyScalar(currentSpeed * delta);
+      this._moveVector.applyAxisAngle(this._yAxis, this.rotation.y);
+      this._moveVector.multiplyScalar(currentSpeed * delta);
 
       // Check collision before moving
-      const nextPos = this.position.clone().add(moveVector);
-      if (!this.world.checkCollision(nextPos, this.radius)) {
-        this.position.add(moveVector);
+      this._nextPos.copy(this.position).add(this._moveVector);
+      if (!this.world.checkCollision(this._nextPos, this.radius)) {
+        this.position.add(this._moveVector);
       } else {
         // Try sliding along X or Z individually
-        const nextPosX = this.position.clone().add(new THREE.Vector3(moveVector.x, 0, 0));
-        if (!this.world.checkCollision(nextPosX, this.radius)) {
-          this.position.x += moveVector.x;
+        this._nextPos.set(this.position.x + this._moveVector.x, this.position.y, this.position.z);
+        if (!this.world.checkCollision(this._nextPos, this.radius)) {
+          this.position.x += this._moveVector.x;
         }
-        const nextPosZ = this.position.clone().add(new THREE.Vector3(0, 0, moveVector.z));
-        if (!this.world.checkCollision(nextPosZ, this.radius)) {
-          this.position.z += moveVector.z;
+        this._nextPos.set(this.position.x, this.position.y, this.position.z + this._moveVector.z);
+        if (!this.world.checkCollision(this._nextPos, this.radius)) {
+          this.position.z += this._moveVector.z;
         }
       }
     }
@@ -206,9 +214,10 @@ export class Player {
       this.characterMesh.position.set(this.position.x, this.position.y - 1.7, this.position.z);
       this.characterMesh.rotation.y = this.rotation.y;
 
-      const offset = new THREE.Vector3(0.9, 0.4, 3.2);
-      offset.applyEuler(new THREE.Euler(this.rotation.x * 0.4, this.rotation.y, 0, 'YXZ'));
-      this.camera.position.copy(this.position).add(offset);
+      this._tpsOffset.set(0.9, 0.4, 3.2);
+      this._tpsEuler.set(this.rotation.x * 0.4, this.rotation.y, 0, 'YXZ');
+      this._tpsOffset.applyEuler(this._tpsEuler);
+      this.camera.position.copy(this.position).add(this._tpsOffset);
       this.camera.quaternion.setFromEuler(this.rotation);
     } else if (this.perspective === 'TOPDOWN') {
       // Isometric tactical birds-eye
@@ -221,7 +230,7 @@ export class Player {
     }
 
     // 6. Limb Walking Animation for TPS / Top-Down View
-    const isMoving = moveVector.lengthSq() > 0;
+    const isMoving = this._moveVector.lengthSq() > 0;
     if (this.characterMesh && this.characterMesh.visible) {
       if (isMoving) {
         this.walkAnimTime = (this.walkAnimTime || 0) + delta * (isSprinting ? 14 : 9);
@@ -262,4 +271,21 @@ export class Player {
       isSprinting
     };
   }
+
+  destroy() {
+    if (this.characterMesh) {
+      this.scene.remove(this.characterMesh);
+      this.characterMesh.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
+      this.characterMesh = null;
+    }
+  }
 }
+
