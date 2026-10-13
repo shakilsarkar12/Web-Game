@@ -1,0 +1,217 @@
+// Player.js - Player controller with FPS, TPS, Top-Down perspectives, stamina sprint, jump, and collision physics
+import * as THREE from 'three';
+
+export class Player {
+  constructor(camera, scene, world) {
+    this.camera = camera;
+    this.scene = scene;
+    this.world = world;
+
+    // Position & Physics
+    this.position = new THREE.Vector3(0, 1.7, 0);
+    this.velocity = new THREE.Vector3();
+    this.rotation = new THREE.Euler(0, 0, 0, 'YXZ');
+    this.isGrounded = true;
+    this.radius = 0.5;
+
+    // Movement Speeds
+    this.walkSpeed = 7.0;
+    this.sprintSpeed = 12.0;
+    this.jumpForce = 8.5;
+    this.gravity = 22.0;
+
+    // Stats
+    this.health = 100;
+    this.maxHealth = 100;
+    this.armor = 50;
+    this.maxArmor = 100;
+    this.stamina = 100;
+    this.maxStamina = 100;
+
+    // Perspectives: 'FPS', 'TPS', 'TOPDOWN'
+    this.perspective = 'FPS';
+
+    // 3D Player Character Model (rendered in TPS & TopDown)
+    this.characterMesh = this.buildPlayerMesh();
+    this.scene.add(this.characterMesh);
+    this.characterMesh.visible = false; // Hidden in FPS
+  }
+
+  buildPlayerMesh() {
+    const group = new THREE.Group();
+
+    // Military camo tactical vest & body
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x276749, roughness: 0.8 });
+    const vestMat = new THREE.MeshStandardMaterial({ color: 0x1a202c, roughness: 0.6 });
+
+    // Torso
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.45), bodyMat);
+    torso.position.y = 1.25;
+    group.add(torso);
+
+    // Armor Plate
+    const vest = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.65, 0.48), vestMat);
+    vest.position.y = 1.3;
+    group.add(vest);
+
+    // Head with tactical helmet
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xd69e2e });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), headMat);
+    head.position.y = 1.95;
+    group.add(head);
+
+    const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.25, 0.46), vestMat);
+    helmet.position.y = 2.12;
+    group.add(helmet);
+
+    // Arms
+    const armMat = new THREE.MeshStandardMaterial({ color: 0x276749 });
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), armMat);
+    armL.position.set(-0.45, 1.25, 0);
+    group.add(armL);
+
+    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), armMat);
+    armR.position.set(0.45, 1.25, 0);
+    group.add(armR);
+
+    // Legs
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x2d3748 });
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), legMat);
+    legL.position.set(-0.2, 0.4, 0);
+    group.add(legL);
+
+    const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.8, 0.25), legMat);
+    legR.position.set(0.2, 0.4, 0);
+    group.add(legR);
+
+    return group;
+  }
+
+  setPerspective(mode) {
+    this.perspective = mode;
+    this.characterMesh.visible = (mode !== 'FPS');
+  }
+
+  togglePerspective() {
+    if (this.perspective === 'FPS') this.setPerspective('TPS');
+    else if (this.perspective === 'TPS') this.setPerspective('TOPDOWN');
+    else this.setPerspective('FPS');
+    return this.perspective;
+  }
+
+  takeDamage(amount) {
+    let remaining = amount;
+    // Armor absorbs 50% first
+    if (this.armor > 0) {
+      const absorbed = Math.min(this.armor, Math.round(amount * 0.5));
+      this.armor -= absorbed;
+      remaining -= absorbed;
+    }
+    this.health = Math.max(0, this.health - remaining);
+    return this.health <= 0;
+  }
+
+  heal(amount) {
+    this.health = Math.min(this.maxHealth, this.health + amount);
+  }
+
+  addArmor(amount) {
+    this.armor = Math.min(this.maxArmor, this.armor + amount);
+  }
+
+  update(delta, input) {
+    // 1. Stamina Management
+    const isSprinting = input.sprint && this.stamina > 10 && (input.moveForward || input.moveBackward || input.moveLeft || input.moveRight);
+    if (isSprinting) {
+      this.stamina = Math.max(0, this.stamina - 28 * delta);
+    } else {
+      this.stamina = Math.min(this.maxStamina, this.stamina + 20 * delta);
+    }
+
+    const currentSpeed = isSprinting ? this.sprintSpeed : this.walkSpeed;
+
+    // 2. Mouse Look & Rotation
+    if (input.mouseDeltaX || input.mouseDeltaY) {
+      this.rotation.y -= input.mouseDeltaX * 0.0022;
+      this.rotation.x -= input.mouseDeltaY * 0.0022;
+      // Clamp vertical pitch (-85 to +85 degrees)
+      this.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, this.rotation.x));
+    }
+
+    // 3. Horizontal Movement Calculation
+    const moveVector = new THREE.Vector3();
+    if (input.moveForward) moveVector.z -= 1;
+    if (input.moveBackward) moveVector.z += 1;
+    if (input.moveLeft) moveVector.x -= 1;
+    if (input.moveRight) moveVector.x += 1;
+
+    if (moveVector.lengthSq() > 0) {
+      moveVector.normalize();
+      // Rotate by player's yaw
+      moveVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
+      moveVector.multiplyScalar(currentSpeed * delta);
+
+      // Check collision before moving
+      const nextPos = this.position.clone().add(moveVector);
+      if (!this.world.checkCollision(nextPos, this.radius)) {
+        this.position.add(moveVector);
+      } else {
+        // Try sliding along X or Z individually
+        const nextPosX = this.position.clone().add(new THREE.Vector3(moveVector.x, 0, 0));
+        if (!this.world.checkCollision(nextPosX, this.radius)) {
+          this.position.x += moveVector.x;
+        }
+        const nextPosZ = this.position.clone().add(new THREE.Vector3(0, 0, moveVector.z));
+        if (!this.world.checkCollision(nextPosZ, this.radius)) {
+          this.position.z += moveVector.z;
+        }
+      }
+    }
+
+    // 4. Jump & Gravity
+    if (input.jump && this.isGrounded) {
+      this.velocity.y = this.jumpForce;
+      this.isGrounded = false;
+    }
+
+    this.velocity.y -= this.gravity * delta;
+    this.position.y += this.velocity.y * delta;
+
+    // Ground floor check
+    if (this.position.y <= 1.7) {
+      this.position.y = 1.7;
+      this.velocity.y = 0;
+      this.isGrounded = true;
+    }
+
+    // 5. Update Camera according to Perspective
+    if (this.perspective === 'FPS') {
+      this.camera.position.copy(this.position);
+      this.camera.quaternion.setFromEuler(this.rotation);
+      this.characterMesh.visible = false;
+    } else if (this.perspective === 'TPS') {
+      // Over-the-shoulder third-person
+      this.characterMesh.visible = true;
+      this.characterMesh.position.set(this.position.x, this.position.y - 1.7, this.position.z);
+      this.characterMesh.rotation.y = this.rotation.y;
+
+      const offset = new THREE.Vector3(0.9, 0.4, 3.2);
+      offset.applyEuler(new THREE.Euler(this.rotation.x * 0.4, this.rotation.y, 0, 'YXZ'));
+      this.camera.position.copy(this.position).add(offset);
+      this.camera.quaternion.setFromEuler(this.rotation);
+    } else if (this.perspective === 'TOPDOWN') {
+      // Isometric tactical birds-eye
+      this.characterMesh.visible = true;
+      this.characterMesh.position.set(this.position.x, this.position.y - 1.7, this.position.z);
+      this.characterMesh.rotation.y = this.rotation.y;
+
+      this.camera.position.set(this.position.x, this.position.y + 16, this.position.z + 10);
+      this.camera.lookAt(this.position.x, this.position.y, this.position.z);
+    }
+
+    return {
+      isMoving: moveVector.lengthSq() > 0,
+      isSprinting
+    };
+  }
+}

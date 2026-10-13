@@ -1,0 +1,551 @@
+// World.js - 3D Dhaka City Generator (Roads, Buildings, Rickshaws, Tong Dokan, Landmarks, Barrels)
+import * as THREE from 'three';
+import { TextureGenerator } from './TextureGenerator.js';
+
+export class World {
+  constructor(scene) {
+    this.scene = scene;
+    this.colliders = []; // Bounding boxes for collision detection
+    this.explosiveBarrels = []; // Objects that explode when shot
+    this.lights = [];
+    this.roadSize = 160;
+
+    this.buildLighting();
+    this.buildGroundAndRoads();
+    this.buildBuildings();
+    this.buildRickshawsAndVehicles();
+    this.buildTongDokanAndStreetStalls();
+    this.buildStreetProps();
+    this.buildExplosiveBarrels();
+  }
+
+  buildLighting() {
+    // Ambient and hemisphere dusk/sunset light for rich atmosphere
+    const ambientLight = new THREE.AmbientLight(0xffedd5, 0.75);
+    this.scene.add(ambientLight);
+
+    const hemiLight = new THREE.HemisphereLight(0xffd166, 0x1e293b, 0.8);
+    this.scene.add(hemiLight);
+
+    // Glowing Moon in the Dhaka night sky
+    const moonGeo = new THREE.SphereGeometry(10, 16, 16);
+    const moonMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4 });
+    const moon = new THREE.Mesh(moonGeo, moonMat);
+    moon.position.set(60, 95, -70);
+    this.scene.add(moon);
+
+    // Main Golden Hour / Moon directional light
+    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.4);
+    dirLight.position.set(50, 85, 30);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 250;
+    const d = 85;
+    dirLight.shadow.camera.left = -d;
+    dirLight.shadow.camera.right = d;
+    dirLight.shadow.camera.top = d;
+    dirLight.shadow.camera.bottom = -d;
+    this.scene.add(dirLight);
+
+    // Warm atmospheric street lights
+    const streetLightPositions = [
+      [-25, 6, -20], [25, 6, -20],
+      [-25, 6, 20], [25, 6, 20],
+      [0, 6, -45], [0, 6, 45],
+      [-45, 6, 0], [45, 6, 0]
+    ];
+
+    streetLightPositions.forEach(([x, y, z]) => {
+      const pLight = new THREE.PointLight(0xffb547, 1.8, 28, 1.5);
+      pLight.position.set(x, y, z);
+      this.scene.add(pLight);
+
+      // Light post mesh
+      const poleGeo = new THREE.CylinderGeometry(0.12, 0.16, 6, 8);
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.8 });
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(x, 3, z);
+      this.scene.add(pole);
+
+      // Lamp head
+      const lampHeadGeo = new THREE.ConeGeometry(0.6, 0.4, 8);
+      const lampHeadMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+      const lampHead = new THREE.Mesh(lampHeadGeo, lampHeadMat);
+      lampHead.position.set(x, 5.9, z);
+      this.scene.add(lampHead);
+
+      // Add collider for pole
+      this.addBoxCollider(pole.position, new THREE.Vector3(0.5, 6, 0.5));
+    });
+  }
+
+  buildGroundAndRoads() {
+    // Main terrain / Ground
+    const groundGeo = new THREE.PlaneGeometry(this.roadSize * 1.5, this.roadSize * 1.5);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x1a202c,
+      roughness: 0.95
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    this.scene.add(ground);
+
+    // Asphalt Crossroads (Dhaka Main Avenue)
+    const asphaltTex = TextureGenerator.createAsphaltTexture();
+    const roadMat = new THREE.MeshStandardMaterial({
+      map: asphaltTex,
+      roughness: 0.85
+    });
+
+    // North-South Road
+    const nsRoadGeo = new THREE.PlaneGeometry(16, this.roadSize);
+    const nsRoad = new THREE.Mesh(nsRoadGeo, roadMat);
+    nsRoad.rotation.x = -Math.PI / 2;
+    nsRoad.position.y = 0.02;
+    nsRoad.receiveShadow = true;
+    this.scene.add(nsRoad);
+
+    // East-West Road
+    const ewRoadGeo = new THREE.PlaneGeometry(this.roadSize, 16);
+    const ewRoad = new THREE.Mesh(ewRoadGeo, roadMat);
+    ewRoad.rotation.x = -Math.PI / 2;
+    ewRoad.position.y = 0.025;
+    ewRoad.receiveShadow = true;
+    this.scene.add(ewRoad);
+
+    // Sidewalks / Footpaths (Raised Curbs)
+    const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x718096, roughness: 0.9 });
+    const curbPositions = [
+      { x: -20, z: -20, w: 20, h: 20 },
+      { x: 20, z: -20, w: 20, h: 20 },
+      { x: -20, z: 20, w: 20, h: 20 },
+      { x: 20, z: 20, w: 20, h: 20 }
+    ];
+
+    curbPositions.forEach(c => {
+      const curbGeo = new THREE.BoxGeometry(c.w, 0.25, c.h);
+      const curb = new THREE.Mesh(curbGeo, sidewalkMat);
+      curb.position.set(c.x, 0.125, c.z);
+      curb.receiveShadow = true;
+      this.scene.add(curb);
+    });
+
+    // Center Roundabout (চত্বর / Shahbagh style circle)
+    const roundaboutGeo = new THREE.CylinderGeometry(6, 6, 0.35, 32);
+    const roundaboutMat = new THREE.MeshStandardMaterial({ color: 0x2f855a, roughness: 0.9 });
+    const roundabout = new THREE.Mesh(roundaboutGeo, roundaboutMat);
+    roundabout.position.set(0, 0.175, 0);
+    this.scene.add(roundabout);
+    this.addCylinderCollider(roundabout.position, 6, 0.35);
+
+    // Monument in Roundabout with Bangladesh Flag
+    const monumentBaseGeo = new THREE.BoxGeometry(2, 2.5, 2);
+    const monumentBaseMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0 });
+    const monumentBase = new THREE.Mesh(monumentBaseGeo, monumentBaseMat);
+    monumentBase.position.set(0, 1.4, 0);
+    this.scene.add(monumentBase);
+    this.addBoxCollider(monumentBase.position, new THREE.Vector3(2.2, 3, 2.2));
+
+    // Flagpole
+    const poleGeo = new THREE.CylinderGeometry(0.06, 0.06, 7, 8);
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e0, metalness: 0.7 });
+    const flagpole = new THREE.Mesh(poleGeo, poleMat);
+    flagpole.position.set(0, 5.5, 0);
+    this.scene.add(flagpole);
+
+    // Bangladesh Flag
+    const flagGeo = new THREE.PlaneGeometry(2.4, 1.5);
+    const flagMat = new THREE.MeshStandardMaterial({
+      map: TextureGenerator.createBDFlagTexture(),
+      side: THREE.DoubleSide
+    });
+    const flag = new THREE.Mesh(flagGeo, flagMat);
+    flag.position.set(1.2, 8, 0);
+    flag.rotation.y = 0.2;
+    this.scene.add(flag);
+  }
+
+  buildBuildings() {
+    const buildingData = [
+      // Dhaka College Building (Historic Red Brick Architecture)
+      {
+        x: -28, z: -35, w: 22, d: 18, h: 14,
+        color: 0x9b2c2c,
+        sign: { title: 'ঢাকা কলেজ', subtitle: 'DHAKA COLLEGE', bg: '#742a2a', border: '#ecc94b', isNeon: true }
+      },
+      // Commercial Plaza (Bismillah Tailors & Electronics)
+      {
+        x: 28, z: -35, w: 20, d: 20, h: 22,
+        color: 0x2d3748,
+        sign: { title: 'বিসমিল্লাহ টেইলার্স', subtitle: 'Bismillah Tailors & Fabrics', bg: '#1a365d', border: '#63b3ed', isNeon: true }
+      },
+      // Dhanmondi 27 Tower
+      {
+        x: -28, z: 35, w: 20, d: 20, h: 26,
+        color: 0x1a202c,
+        sign: { title: 'ধানমন্ডি ২৭', subtitle: 'Dhanmondi Commercial Center', bg: '#234e52', border: '#4fd1c5', isNeon: true }
+      },
+      // Hotel Al-Kaderia Building
+      {
+        x: 28, z: 35, w: 22, d: 18, h: 16,
+        color: 0x4a5568,
+        sign: { title: 'হোটেল আল-কাদেরিয়া', subtitle: 'বিরিয়ানি ও কাবাব ঘর', bg: '#7b341e', border: '#f6ad55', isNeon: true }
+      },
+      // Background Outer High-rises
+      { x: -55, z: -15, w: 18, d: 24, h: 32, color: 0x2d3748 },
+      { x: 55, z: -15, w: 18, d: 24, h: 28, color: 0x1a202c },
+      { x: -55, z: 25, w: 22, d: 18, h: 24, color: 0x4a5568 },
+      { x: 55, z: 25, w: 22, d: 18, h: 35, color: 0x2d3748 }
+    ];
+
+    buildingData.forEach(b => {
+      const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
+      const mat = new THREE.MeshStandardMaterial({
+        color: b.color,
+        roughness: 0.85
+      });
+      const building = new THREE.Mesh(geo, mat);
+      building.position.set(b.x, b.h / 2, b.z);
+      building.castShadow = true;
+      building.receiveShadow = true;
+      this.scene.add(building);
+
+      this.addBoxCollider(building.position, new THREE.Vector3(b.w, b.h, b.d));
+
+      // Roof water tank (iconic Dhaka rooftop detail)
+      const tankGeo = new THREE.CylinderGeometry(1.2, 1.2, 2.2, 12);
+      const tankMat = new THREE.MeshStandardMaterial({ color: 0x2b6cb0, roughness: 0.5 });
+      const tank = new THREE.Mesh(tankGeo, tankMat);
+      tank.position.set(b.x - b.w / 4, b.h + 1.1, b.z - b.d / 4);
+      this.scene.add(tank);
+
+      // Windows Grid
+      this.createBuildingWindows(building, b);
+
+      // Signboard
+      if (b.sign) {
+        const signGeo = new THREE.PlaneGeometry(9, 3.5);
+        const signTex = TextureGenerator.createSignboardTexture({
+          title: b.sign.title,
+          subtitle: b.sign.subtitle,
+          bgColor: b.sign.bg,
+          borderColor: b.sign.border,
+          textColor: '#ffffff',
+          isNeon: b.sign.isNeon
+        });
+        const signMat = new THREE.MeshBasicMaterial({ map: signTex, side: THREE.DoubleSide });
+        const signMesh = new THREE.Mesh(signGeo, signMat);
+
+        // Position sign facing the street
+        if (b.z < 0) {
+          signMesh.position.set(b.x, 7, b.z + b.d / 2 + 0.1);
+        } else {
+          signMesh.position.set(b.x, 7, b.z - b.d / 2 - 0.1);
+          signMesh.rotation.y = Math.PI;
+        }
+        this.scene.add(signMesh);
+      }
+    });
+  }
+
+  createBuildingWindows(building, data) {
+    const windowMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+    const rows = Math.floor(data.h / 4);
+    const cols = Math.floor(data.w / 4);
+
+    for (let r = 1; r < rows; r++) {
+      for (let c = 1; c < cols; c++) {
+        // 50% chance a window is lit
+        if (Math.random() > 0.45) {
+          const winGeo = new THREE.PlaneGeometry(1.2, 1.5);
+          const win = new THREE.Mesh(winGeo, windowMat);
+          const offsetZ = data.z < 0 ? data.d / 2 + 0.05 : -data.d / 2 - 0.05;
+          win.position.set(
+            data.x - data.w / 2 + c * 3.5,
+            r * 3.5,
+            data.z + offsetZ
+          );
+          if (data.z > 0) win.rotation.y = Math.PI;
+          this.scene.add(win);
+        }
+      }
+    }
+  }
+
+  buildRickshawsAndVehicles() {
+    // Spawn Cycle Rickshaws
+    const rickshawPositions = [
+      { x: -10, z: -14, rot: 0.3 },
+      { x: 12, z: -16, rot: -0.6 },
+      { x: -12, z: 18, rot: 1.2 },
+      { x: 14, z: 14, rot: -2.1 }
+    ];
+
+    rickshawPositions.forEach(p => {
+      this.createCycleRickshaw(p.x, p.z, p.rot);
+    });
+
+    // Spawn Green CNG Auto-Rickshaws
+    const cngPositions = [
+      { x: -14, z: -6, rot: 1.57 },
+      { x: 14, z: 8, rot: -1.57 }
+    ];
+
+    cngPositions.forEach(p => {
+      this.createCNGRickshaw(p.x, p.z, p.rot);
+    });
+  }
+
+  createCycleRickshaw(x, z, rot) {
+    const group = new THREE.Group();
+
+    // Rickshaw Body / Frame
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xdd6b20, roughness: 0.6 });
+    const seatMat = new THREE.MeshStandardMaterial({ color: 0x3182ce, roughness: 0.8 });
+
+    // Passenger seat
+    const seatGeo = new THREE.BoxGeometry(1.6, 0.8, 1.2);
+    const seat = new THREE.Mesh(seatGeo, seatMat);
+    seat.position.set(0, 0.9, -0.4);
+    group.add(seat);
+
+    // Decorative Hood / Canopy (Painted traditional floral hood)
+    const hoodGeo = new THREE.CylinderGeometry(0.9, 0.9, 1.5, 12, 1, false, 0, Math.PI);
+    const hoodMat = new THREE.MeshStandardMaterial({ color: 0xe53e3e, side: THREE.DoubleSide });
+    const hood = new THREE.Mesh(hoodGeo, hoodMat);
+    hood.rotation.z = Math.PI / 2;
+    hood.position.set(0, 1.7, -0.4);
+    group.add(hood);
+
+    // Rickshaw Art Backplate
+    const artGeo = new THREE.PlaneGeometry(1.2, 0.8);
+    const artMat = new THREE.MeshStandardMaterial({
+      map: TextureGenerator.createRickshawArtTexture(),
+      roughness: 0.4
+    });
+    const artPlate = new THREE.Mesh(artGeo, artMat);
+    artPlate.position.set(0, 0.8, -1.02);
+    artPlate.rotation.y = Math.PI;
+    group.add(artPlate);
+
+    // Three Wheels
+    const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.1, 16);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a202c, metalness: 0.8 });
+
+    // Front wheel
+    const frontWheel = new THREE.Mesh(wheelGeo, wheelMat);
+    frontWheel.rotation.z = Math.PI / 2;
+    frontWheel.position.set(0, 0.45, 1.2);
+    group.add(frontWheel);
+
+    // Rear left wheel
+    const rearL = new THREE.Mesh(wheelGeo, wheelMat);
+    rearL.rotation.z = Math.PI / 2;
+    rearL.position.set(-0.85, 0.45, -0.4);
+    group.add(rearL);
+
+    // Rear right wheel
+    const rearR = new THREE.Mesh(wheelGeo, wheelMat);
+    rearR.rotation.z = Math.PI / 2;
+    rearR.position.set(0.85, 0.45, -0.4);
+    group.add(rearR);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rot;
+    this.scene.add(group);
+
+    this.addBoxCollider(new THREE.Vector3(x, 0.9, z), new THREE.Vector3(2.0, 2.0, 2.8));
+  }
+
+  createCNGRickshaw(x, z, rot) {
+    const group = new THREE.Group();
+
+    // Body (Dhaka Green with Yellow Stripe)
+    const bodyGeo = new THREE.BoxGeometry(1.8, 1.6, 2.8);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x276749, roughness: 0.5 });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.set(0, 1.1, 0);
+    group.add(body);
+
+    // Yellow stripe
+    const stripeGeo = new THREE.BoxGeometry(1.82, 0.25, 2.82);
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0xd69e2e });
+    const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+    stripe.position.set(0, 1.1, 0);
+    group.add(stripe);
+
+    // Metal safety mesh wire windows
+    const windowGeo = new THREE.BoxGeometry(1.84, 0.6, 1.5);
+    const windowMat = new THREE.MeshBasicMaterial({ color: 0x1a202c, wireframe: true });
+    const win = new THREE.Mesh(windowGeo, windowMat);
+    win.position.set(0, 1.4, -0.2);
+    group.add(win);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rot;
+    this.scene.add(group);
+
+    this.addBoxCollider(new THREE.Vector3(x, 1.0, z), new THREE.Vector3(2.2, 2.0, 3.2));
+  }
+
+  buildTongDokanAndStreetStalls() {
+    // Traditional Dhaka Tea Stall ("মায়া চা ঘর")
+    const stallGroup = new THREE.Group();
+
+    // Wooden / tin stall frame
+    const stallBaseGeo = new THREE.BoxGeometry(4.5, 2.8, 2.5);
+    const stallBaseMat = new THREE.MeshStandardMaterial({ color: 0x5a3d28, roughness: 0.9 });
+    const stall = new THREE.Mesh(stallBaseGeo, stallBaseMat);
+    stall.position.set(0, 1.4, 0);
+    stallGroup.add(stall);
+
+    // Corrugated tin roof
+    const roofGeo = new THREE.BoxGeometry(5.0, 0.2, 3.2);
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, metalness: 0.6 });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.set(0, 2.9, 0);
+    roof.rotation.x = 0.08;
+    stallGroup.add(roof);
+
+    // Tea kettle / Samovar
+    const kettleGeo = new THREE.CylinderGeometry(0.35, 0.45, 0.8, 12);
+    const kettleMat = new THREE.MeshStandardMaterial({ color: 0xd69e2e, metalness: 0.8 });
+    const kettle = new THREE.Mesh(kettleGeo, kettleMat);
+    kettle.position.set(1.2, 2.0, 0.6);
+    stallGroup.add(kettle);
+
+    // Wooden tea bench for customers
+    const benchGeo = new THREE.BoxGeometry(3.6, 0.45, 0.7);
+    const benchMat = new THREE.MeshStandardMaterial({ color: 0x744210 });
+    const bench = new THREE.Mesh(benchGeo, benchMat);
+    bench.position.set(0, 0.35, 2.2);
+    stallGroup.add(bench);
+
+    // Signboard: "মায়া স্পেশাল চা"
+    const signGeo = new THREE.PlaneGeometry(3.8, 1.2);
+    const signMat = new THREE.MeshBasicMaterial({
+      map: TextureGenerator.createTongDokanTexture(),
+      side: THREE.DoubleSide
+    });
+    const sign = new THREE.Mesh(signGeo, signMat);
+    sign.position.set(0, 2.6, 1.26);
+    stallGroup.add(sign);
+
+    stallGroup.position.set(-14, 0, -18);
+    this.scene.add(stallGroup);
+
+    this.addBoxCollider(new THREE.Vector3(-14, 1.5, -18), new THREE.Vector3(5.0, 3.0, 4.0));
+  }
+
+  buildStreetProps() {
+    // Traffic barricades / Checkpoint
+    const barrierTex = TextureGenerator.createHazardTexture();
+    const barrierMat = new THREE.MeshStandardMaterial({ map: barrierTex });
+
+    const barrierPositions = [
+      { x: -5, z: -10, rot: 0.1 },
+      { x: 5, z: 10, rot: -0.2 }
+    ];
+
+    barrierPositions.forEach(p => {
+      const barGeo = new THREE.BoxGeometry(3.0, 1.0, 0.4);
+      const bar = new THREE.Mesh(barGeo, barrierMat);
+      bar.position.set(p.x, 0.5, p.z);
+      bar.rotation.y = p.rot;
+      this.scene.add(bar);
+      this.addBoxCollider(bar.position, new THREE.Vector3(3.2, 1.2, 0.8));
+    });
+
+    // Street trees / greenery on corners
+    const treePositions = [
+      { x: -16, z: -16 }, { x: 16, z: -16 },
+      { x: -16, z: 16 }, { x: 16, z: 16 }
+    ];
+
+    treePositions.forEach(p => {
+      // Trunk
+      const trunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 3, 8);
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a3d28 });
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.position.set(p.x, 1.5, p.z);
+      this.scene.add(trunk);
+
+      // Leaves (Low-poly foliage)
+      const leavesGeo = new THREE.DodecahedronGeometry(2.2, 1);
+      const leavesMat = new THREE.MeshStandardMaterial({ color: 0x276749, roughness: 0.8 });
+      const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+      leaves.position.set(p.x, 4.2, p.z);
+      this.scene.add(leaves);
+
+      this.addCylinderCollider(trunk.position, 0.6, 3);
+    });
+  }
+
+  buildExplosiveBarrels() {
+    // Interactive red explosive barrels placed strategically around Dhaka streets
+    const barrelPositions = [
+      { x: -8, z: -4 },
+      { x: 8, z: -4 },
+      { x: -6, z: 12 },
+      { x: 7, z: 15 },
+      { x: -15, z: 5 },
+      { x: 15, z: -5 }
+    ];
+
+    const barrelGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.4, 16);
+    const barrelMat = new THREE.MeshStandardMaterial({
+      color: 0xe53e3e,
+      roughness: 0.4,
+      metalness: 0.3
+    });
+
+    barrelPositions.forEach((p, idx) => {
+      const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+      barrel.position.set(p.x, 0.7, p.z);
+      barrel.castShadow = true;
+      this.scene.add(barrel);
+
+      const barrelObj = {
+        mesh: barrel,
+        position: barrel.position,
+        radius: 0.6,
+        isExploded: false,
+        id: `barrel_${idx}`
+      };
+
+      this.explosiveBarrels.push(barrelObj);
+      this.addCylinderCollider(barrel.position, 0.6, 1.4);
+    });
+  }
+
+  addBoxCollider(pos, size) {
+    const min = new THREE.Vector3(pos.x - size.x / 2, pos.y - size.y / 2, pos.z - size.z / 2);
+    const max = new THREE.Vector3(pos.x + size.x / 2, pos.y + size.y / 2, pos.z + size.z / 2);
+    this.colliders.push(new THREE.Box3(min, max));
+  }
+
+  addCylinderCollider(pos, radius, height) {
+    const min = new THREE.Vector3(pos.x - radius, pos.y - height / 2, pos.z - radius);
+    const max = new THREE.Vector3(pos.x + radius, pos.y + height / 2, pos.z + radius);
+    this.colliders.push(new THREE.Box3(min, max));
+  }
+
+  // Check if a point/sphere collides with any world obstacle
+  checkCollision(pos, radius = 0.5) {
+    const playerSphere = new THREE.Sphere(pos, radius);
+    for (let i = 0; i < this.colliders.length; i++) {
+      if (this.colliders[i].intersectsSphere(playerSphere)) {
+        return true;
+      }
+    }
+    // Boundary check (within Dhaka map zone)
+    const limit = this.roadSize / 2 - 2;
+    if (Math.abs(pos.x) > limit || Math.abs(pos.z) > limit) {
+      return true;
+    }
+    return false;
+  }
+}
