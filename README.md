@@ -1,8 +1,9 @@
 # 🇧🇩 Battle for Dhaka: 3D Survival Shooter (Web Game)
 
 [![React](https://img.shields.io/badge/React-19.x-61dafb?style=for-the-badge&logo=react)](https://react.dev/)
-[![Three.js](https://img.shields.io/badge/Three.js-r182-black?style=for-the-badge&logo=three.js)](https://threejs.org/)
+[![Three.js](https://img.shields.io/badge/Three.js-r186-black?style=for-the-badge&logo=three.js)](https://threejs.org/)
 [![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?style=for-the-badge&logo=vite)](https://vitejs.dev/)
+[![Linter](https://img.shields.io/badge/Oxlint-0_Errors_|_0_Warnings-emerald?style=for-the-badge)](https://oxc.rs/)
 [![Web Audio API](https://img.shields.io/badge/Audio-Procedural_Web_Audio-orange?style=for-the-badge)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
 [![License](https://img.shields.io/badge/License-MIT-emerald?style=for-the-badge)](LICENSE)
 
@@ -16,11 +17,12 @@ A high-octane, next-generation **3D Web Browser Survival Shooter** built from gr
 1. [Game Overview & Lore](#-game-overview--lore)
 2. [Key Gameplay Features](#-key-gameplay-features)
 3. [Complete Codebase Architecture & File Map](#-complete-codebase-architecture--file-map)
-4. [Technical Deep-Dive & Systems Design](#-technical-deep-dive--systems-design)
-5. [Complete Controls & Input Guide](#-complete-controls--input-guide)
-6. [Installation & Development Setup](#-installation--development-setup)
-7. [Future Roadmap & AI Development Suggestions](#-future-roadmap--ai-development-suggestions)
-8. [AI Agent Contributor Guidelines](#-ai-agent-contributor-guidelines)
+4. [Performance Engineering & Engine Architecture](#-performance-engineering--engine-architecture)
+5. [Graphics Quality & Device Scaling System](#-graphics-quality--device-scaling-system)
+6. [Complete Controls & Input Guide](#-complete-controls--input-guide)
+7. [Installation & Development Setup](#-installation--development-setup)
+8. [Future Roadmap & AI Development Suggestions](#-future-roadmap--ai-development-suggestions)
+9. [AI Agent Contributor Guidelines](#-ai-agent-contributor-guidelines)
 
 ---
 
@@ -71,7 +73,7 @@ The year is 2035. An unnatural chemical catastrophe strikes the heart of Dhaka, 
 
 ### 6. 🌩️ Dynamic Dhaka Monsoon Thunderstorm
 - Randomly occurring blinding lightning flashes illuminate the skyline and colonial buildings, accompanied by procedural rolling bass thunderclaps.
-- Toggleable monsoon rain with falling particle streaks and reflective asphalt puddles.
+- Toggleable monsoon rain with falling particle streaks, puddle splashes, and wet road surface reflections.
 
 ### 7. 🔥 Multikill Combo Streaks
 - Rapid consecutive kills within 3.2 seconds trigger celebratory banners and audio fanfares:
@@ -109,7 +111,7 @@ c:\Shakil's Project\Research\
 ├── src/
 │   ├── main.jsx                 # React root DOM hydration
 │   ├── App.jsx                  # Master React controller wiring UI modals and GameEngine
-│   ├── index.css                # Vanilla CSS design system, typography, animations
+│   ├── index.css                # Pure Vanilla CSS design system, layout tokens, animations
 │   ├── audio/
 │   │   └── SoundEngine.js       # 100% Procedural Web Audio API sound synthesizer
 │   ├── game/
@@ -117,60 +119,99 @@ c:\Shakil's Project\Research\
 │   │   ├── World.js             # 3D Dhaka City generator, buildings, landmarks, CNG, lights
 │   │   ├── Player.js            # Player controller, FPS/TPS/TopDown views, stamina, collision
 │   │   ├── WeaponSystem.js      # 5 guns, RPG ballistics, sway, bobbing, recoil, grenades, melee
-│   │   ├── EnemyManager.js      # Wave director, 5 enemy classes, procedural walk AI, Boss enrage
-│   │   ├── ParticleSystem.js    # Tracers, blood, explosions, rain, kettle steam, rocket smoke
+│   │   ├── EnemyManager.js      # Spatial hash AI, 5 enemy classes, walk cycles, Boss enrage
+│   │   ├── ParticleSystem.js    # Object-pooled tracers, blood, explosions, rain, casings
 │   │   ├── DropManager.js       # Floating loot pickups (coins, medkits, ammo crates, nuke)
-│   │   └── TextureGenerator.js  # Procedural HTML5 canvas textures (Bengali signs, rickshaw art)
+│   │   └── TextureGenerator.js  # Cached procedural canvas textures (Bengali signs, rickshaw art)
 │   └── components/
 │       ├── HUD.jsx              # Cyberpunk HUD, radar minimap, sniper scope, CNG dash, damage text
-│       ├── MainMenu.jsx         # Start screen with difficulty/camera options & weather toggle
+│       ├── MainMenu.jsx         # Start screen with graphics preset toggle, weather, and start mission
 │       ├── ShopModal.jsx        # In-game resistance armory modal (`B`)
 │       ├── PerkModal.jsx        # Post-wave roguelite level-up 3-card perk selector
-│       ├── PauseMenu.jsx        # Escape/P pause menu with settings
-│       ├── GameOverModal.jsx    # Mission failed score summary and stats screen
-│       └── TouchControls.jsx    # Dual virtual joysticks & buttons for mobile/tablet browsers
+│       ├── PauseMenu.jsx        # Sleek centered pause menu with real-time graphics settings
+│       ├── GameOverModal.jsx    # Mission failed score summary, persistent best-score & confetti
+│       └── TouchControls.jsx    # Virtual joysticks & mobile/tablet action buttons
 ```
 
 ### Detailed File Responsibilities
 
 | File | Primary Role & Internal Mechanics |
 | :--- | :--- |
-| **`GameEngine.js`** | Manages the Three.js `PerspectiveCamera`, `Scene`, `WebGLRenderer`, and animation loop (`animate`). Dispatches stats to React HUD every frame. Handles pointer lock, keyboard input, CNG driving state, floating text coordinate projection (`Vector3.project(camera)`), and environmental timers. |
-| **`World.js`** | Generates the Dhaka crossroads: 8 commercial high-rises with illuminated windows, colonial Dhaka College facade, Bismillah Tailors neon billboard, Maya Tea Stall (`টং দোকান`) with steam kettle, cycle rickshaws with painted hoods/backplates, explosive red fuel barrels, overhead drooping electric wires, rain puddles, and the driveable Green CNG. |
-| **`Player.js`** | Manages player position, velocity, and collision sliding. Supports 3 perspectives: `FPS` (camera at head), `TPS` (over-the-shoulder chase camera with procedural walking limbs), and `TOPDOWN` (tactical isometric birds-eye). Manages health, armor, stamina sprint, and jumping physics. |
-| **`WeaponSystem.js`** | Builds procedural 3D low-poly gun models attached to the camera. Simulates weapon sway, bobbing, recoil kicks, reload progress, shell casing ejections, physical bouncing grenades, quick melee kick strike (`F`), and Meghna-RPG physical rocket ballistics with smoke trails. |
-| **`EnemyManager.js`** | Controls wave progression and spawns 5 enemy types: `Street Ghoul` (standard), `Rabid Crawler` (fast runner), `Toxic Spitter` (ranged acid shooter), `Dhaka Titan` (heavy tank), and `Gulshan Nightmare Boss` (enrages at <50% HP, stomps ground shockwaves). Procedural sinusoidal walk cycles. |
-| **`ParticleSystem.js`** | High-performance particle manager pooling bullet tracers, blood splatters, fireball sparks, acid splatters, brass casings, electric chain arcs, monsoon rain, kettle steam puffs, RPG rocket smoke trails, and ground shockwave rings. |
-| **`SoundEngine.js`** | Zero-asset Web Audio API procedural synth. Generates realistic gunshots, rocket whoosh, reloads, footsteps, heartbeat, hitmarkers, explosions, CNG 2-stroke engine oscillator, dual CNG horn, rickshaw bells, thunderclaps, and killstreak fanfares. |
-| **`DropManager.js`** | Spawns and animates 3D bobbing and rotating pickups from defeated enemies: Taka Coins, Health Medkits, Military Ammo Crates, and Tactical Nuke powerups. |
-| **`TextureGenerator.js`** | Generates high-res canvas textures in memory: Bismillah Tailors signboard, Maya Cha signboard, Bangladesh National Flag, and traditional Dhaka Rickshaw floral art backplates. |
-| **`HUD.jsx`** | Cyberpunk Dhaka HUD overlay: 360° radar minimap with enemy tracking, health/armor/stamina bars, floating RPG combat damage numbers, CNG dashboard (`KM/H` speedometer), tactical sniper scope, multikill combo banners, and weapon slot indicators. |
+| **`GameEngine.js`** | Orchestrates `Scene`, `Camera`, `Renderer`, simulation physics, decoupled HUD throttling (~15Hz), transient camera shake offset, pointer lock, and full system `destroy()`. |
+| **`World.js`** | Generates procedural Dhaka buildings, Dhaka College facade, Bismillah Tailors neon billboard, Maya Tea Stall (`টং দোকান`), cycle rickshaws, and handles graphics quality scaling (shadow maps, point lights). |
+| **`Player.js`** | Manages player coordinates, collision sliding, health, armor, stamina, view modes (`FPS`, `TPS`, `TOPDOWN`), and reuses temporary vectors in movement loops. |
+| **`WeaponSystem.js`** | 3D procedural gun models, ADS aim down sights, physical rocket ballistics, bouncing grenades, kick melee (`F`), and bullet raycasting. |
+| **`EnemyManager.js`** | Manages wave spawning, 5 enemy archetypes, spatial hash grid ($4\text{m}$ cells) to eliminate $O(N^2)$ distance checks, toxic slime projectile pooling, and safe resource disposal on death. |
+| **`ParticleSystem.js`** | Object pools for mesh particles, bullet tracers, and shockwaves. Shared geometries & materials to achieve zero allocations during combat. |
+| **`TextureGenerator.js`** | In-memory canvas texture synthesis with global caching (`_cache`) to prevent VRAM texture duplication across identical street props. |
+| **`SoundEngine.js`** | Real-time procedural audio synth using Web Audio API nodes (`OscillatorNode`, `GainNode`, `BiquadFilterNode`, noise generators) for gunshots, thunder, CNG motor, and horns. |
+| **`HUD.jsx`** | High-performance overlay displaying 360° radar, ammo, health, floating combat damage markers, and multikill combo fanfare. |
 
 ---
 
-## 🔬 Technical Deep-Dive & Systems Design
+## ⚡ Performance Engineering & Engine Architecture
 
-### 1. Zero-Asset Architecture (Pure Procedural Generation)
-Instead of loading megabytes of heavy `.gltf` or `.mp3` files that could fail, cause latency, or break CORS:
-- **3D Meshes:** Built exclusively using Three.js procedural primitives (`BoxGeometry`, `CylinderGeometry`, `ConeGeometry`, `SphereGeometry`, `RingGeometry`).
-- **Textures:** Rendered dynamically at runtime via HTML5 2D Canvas contexts in `TextureGenerator.js` and converted to `THREE.CanvasTexture`.
-- **Sound:** Synthesized in real-time via `AudioContext` using oscillators (`sawtooth`, `triangle`, `sine`), noise buffers, and biquad lowpass/bandpass filters.
+To ensure the game runs smoothly across a broad spectrum of hardware—from low-power mobile devices to high-refresh desktop monitors—the codebase adheres to strict graphics and memory management standards:
 
-### 2. State Synchronization: Three.js Loop vs React VDOM
-- The Three.js engine runs in a continuous `requestAnimationFrame` loop at 60 FPS in `GameEngine.js`.
-- High-frequency mutations (camera movement, particle physics, enemy positions) occur directly in WebGL memory without touching React state.
-- React HUD state (`stats`) is pushed via `uiCallbacks.setStats` once per frame, ensuring butter-smooth 60fps rendering without DOM thrashing.
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    HIGH-FREQUENCY SIMULATION                 │
+│              Three.js Animation Loop (60 - 120 FPS)          │
+│                                                              │
+│  ┌─────────────────┐   ┌─────────────────┐   ┌────────────┐  │
+│  │ Particle Pools  │   │ Spatial Hash AI │   │ Vector3    │  │
+│  │ (Zero Allocs)   │   │ (O(N) vs O(N²)) │   │ Temporaries│  │
+│  └─────────────────┘   └─────────────────┘   └────────────┘  │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+            Throttled HUD Sync │ (15Hz Timer OR Immediate Dirty Flag)
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│                      REACT UI LAYER (15 Hz)                  │
+│  HUD.jsx • Minimap • Health Bars • Hitmarkers • Combat Text  │
+└──────────────────────────────────────────────────────────────┘
+```
 
-### 3. Collision Detection & Wall Sliding
-- World props and buildings register axis-aligned bounding boxes (AABB) in `world.colliders`.
-- `world.checkCollision(position, radius)` checks sphere-to-box overlaps.
-- If a forward move collides, `Player.js` attempts independent sliding along the X and Z axes, ensuring smooth movement around corners and obstacles.
+### 1. Object Pooling (Zero Garbage Collection Thrashing)
+- **Particles:** Pre-allocated mesh pool (`particlePool`) recycling box particles with shared `BoxGeometry` and color-keyed materials.
+- **Tracers:** Pre-allocated line pool (`tracerPool`) with shared line geometries.
+- **Shockwaves:** Reusable ring meshes for explosive detonations and boss stomps.
+- **Slime Projectiles:** Toxic spitter ranged attacks draw from an active/inactive pool (`slimePool`), eliminating GC pauses.
 
-### 4. Vehicle Physics: Driveable CNG Auto-Rickshaw
-- Positioned in world space with heading angle `rotY` and velocity vector.
-- Acceleration, braking, and rolling friction curve simulated in `World.js`.
-- Turning speed dynamically scales with forward momentum to mimic genuine three-wheeler handling.
-- Enemies within 2.6m of the moving CNG suffer collision impulse proportional to vehicle speed (`speed * 14`).
+### 2. Spatial Hash Grid Enemy AI ($O(N)$ vs $O(N^2)$)
+- Replaced nested pairwise enemy checks with a 2D spatial hash grid (`4m` bucket size).
+- During wave updates, enemies only compare distances against neighbors within the same or adjacent 8 grid cells.
+- Solves performance degradation at high wave counts (30-40+ concurrent enemies).
+
+### 3. Decoupled Simulation & React HUD Throttling
+- The WebGL rendering loop runs at full display refresh rate (60–120 FPS).
+- General HUD updates (radar minimap, stats, coords) are throttled to ~15Hz (`0.066s` intervals).
+- High-priority combat events (taking damage, weapon firing, reload, wave start) immediately set a dirty flag to push UI updates with zero perceptible latency.
+
+### 4. Vector & Euler Math Object Reuse
+- Hot loops in `Player.js`, `EnemyManager.js`, `WeaponSystem.js`, and `ParticleSystem.js` reuse module-scoped scratch objects (`_tempVec1`, `_tempVec2`, `_toPlayer`, `_moveStep`, `_lookTarget`, `_pushVec`) instead of allocating `new THREE.Vector3()` every frame.
+
+### 5. Transient Camera Shake (Zero Coordinate Drift)
+- Screen shake is computed as an isolated transient vector `_shakeOffset` relative to base camera coordinates.
+- Prevents cumulative floating-point drift previously caused by applying random offsets directly to the persistent camera transform.
+
+### 6. Texture Caching & Memory Deallocation
+- `TextureGenerator._cache` stores generated HTML5 Canvas textures. Subsequent props and rickshaws reuse existing texture instances.
+- Comprehensive `destroy()` lifecycle routines traverse and dispose geometries, materials, and textures when restarting matches or unmounting the React tree.
+
+---
+
+## 🎨 Graphics Quality & Device Scaling System
+
+Players can select graphics quality presets in both the **Main Menu** and **Pause Menu**:
+
+| Setting | LOW | MEDIUM (Default) | HIGH |
+| :--- | :--- | :--- | :--- |
+| **Target Hardware** | Mobile / Intel iGPU | Standard Laptops / GTX 1060 | Dedicated Gaming GPUs |
+| **Pixel Ratio** | Clamped to `1.0` | Clamped to `1.5` | Native (`window.devicePixelRatio`, up to `2.0`) |
+| **Shadows** | Disabled (`false`) | Enabled (`1024 x 1024`) | Enabled (`2048 x 2048` PCFSoft) |
+| **Streetlights** | Spotlights Only | Spotlights + Ambient Fill | Full Point Lights + Ambient Fill |
+| **Monsoon Rain** | 500 Falling Streaks | 1,000 Falling Streaks | 1,500 Falling Streaks + Surface Reflections |
 
 ---
 
@@ -218,11 +259,15 @@ npm run dev
 ```
 Open **`http://localhost:5173`** in Chrome, Firefox, Edge, or Brave.
 
-### Building for Production
+### Quality Verification Commands
 ```bash
+# Run ultra-fast Oxlint check (should output 0 errors, 0 warnings)
+npm run lint
+
+# Compile production bundle
 npm run build
 ```
-Generates an optimized, tree-shaken static bundle in `dist/`, ready for 1-click deployment to **Vercel**, **Netlify**, or **GitHub Pages**.
+Generates an optimized, tree-shaken static bundle in `dist/` ready for 1-click deployment on **Vercel**, **Netlify**, or **GitHub Pages**.
 
 ---
 
@@ -278,7 +323,7 @@ If you are an **AI coding assistant** or **developer** picking up this codebase 
 When an AI assistant (like Antigravity, Claude, or GPT) works on this repository:
 1. **Preserve Zero-Asset Reliability:** Do not introduce large external assets that could fail to load or require CORS permissions without prior approval. Keep procedural canvas textures and Web Audio API synths as the primary backbone.
 2. **Respect the Cultural Theme:** Maintain the authentic Dhaka cultural flavor (rickshaw art, Bengali typography, local tea stalls, CNG auto-rickshaws, Bangladesh landmarks).
-3. **Keep Vanilla CSS Styling:** Maintain styling in `src/index.css` or component inline styles. Avoid adding Tailwind build-step dependencies unless explicitly configured.
+3. **Use the Pure Vanilla CSS Design System:** Maintain layout utilities in `src/index.css` (`max-w-sm`, `max-w-md`, `grid-cols-3`, etc.). Do not assume external Tailwind build tools are present.
 4. **Three.js Object Lifecycle:** Always dispose of unused geometries, materials, and line objects to prevent WebGL memory leaks when adding new particle systems or weapon types.
 5. **Pointer Lock & Input Management:** Ensure all interactive modals (`ShopModal`, `PerkModal`, `PauseMenu`) correctly release pointer lock on open, and request pointer lock on resume.
 
